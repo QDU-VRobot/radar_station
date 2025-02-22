@@ -5,7 +5,6 @@
 #include <thread>
 #include <chrono>
 #include <utility>
-#include "json/json.h"
 #include "opencv2/core.hpp"
 #include "opencv2/videoio.hpp"
 struct model_config
@@ -18,23 +17,26 @@ struct model_config
 };
 struct video_config
 {
-	uint8_t video_type=2; //0-Video file; 1-Common camera; 2-3rd party camera (hikcamera)
-	const char* video_file=0;
+	uint8_t video_type=0; //0-Video file; 1-Generic camera; 2-3rd party camera (hikcamera)
+	const char* video_file="/home/debian/Programs/robot_master/radar_detector_old/detector/SJTU.mp4";
 	uint8_t video_device=0; //Device number
 	float fps=-1; //FPS, -1=auto, 0=keep original
 	float exposure_time=-1; //Exposure time, -1=auto, 0=keep original
 	float gain=-1; //Gain, -1=auto
+	const char* record_file="radar.mp4";
+	signed char fourcc[4]={'a','v','c','1'}; //-1=interactive
+	int quality=-1; //-1=keep original
 };
-inline hikcamera::camera init_hikcamera(uint8_t device_num)
+inline hikcamera::camera&& init_hikcamera(uint8_t device_num)
 {
 	hikcamera::CAMERA_INFO_LIST devlist=hikcamera::camera::enum_cameras();
 	if(devlist.nDeviceNum<=device_num)
 		throw std::runtime_error("Camera not found, check camera connection");
 	std::cerr<<"Using camera "<<static_cast<unsigned>(device_num)<<std::endl;
-	return hikcamera::camera(devlist.pDeviceInfo[device_num]);
+	return std::move(hikcamera::camera(devlist.pDeviceInfo[device_num]));
 }
-uint8_t mode=0b0111; //Bit 0: Use car model; Bit 1: Use armor model (car model must be used); Bit 2: Display video; Bit 3: Record video; All 0: Generate only
-size_t threads=4;
+uint8_t mode=0b1011; //Bit 0: Use car model; Bit 1: Use armor model (car model must be used); Bit 2: Display video; Bit 3: Record video; All 0: Generate only
+size_t threads=3;
 std::chrono::milliseconds wait_timeout(2);
 int convert(const struct model_config& config, size_t threads, char** car_engine_name=0, char** armor_engine_name=0)
 {
@@ -83,13 +85,11 @@ int convert(const struct model_config& config, size_t threads, char** car_engine
 		delete[] armor_engine;
 	return -1; //Normal
 }
-std::pair<int,int> apply_video_config(const struct video_config& config, cv::VideoCapture& cap, hikcamera::camera& hikcam)
+std::pair<const std::pair<int,int>,int> apply_video_config(const struct video_config& config, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec)
 {
-	int width,height;
+	int width,height,fps;
 	if(cap.isOpened())
 	{
-		width=static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
-		height=static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
 		if(config.fps>0)
 			cap.set(cv::CAP_PROP_FPS,config.fps);
 		if(config.exposure_time!=0)
@@ -98,14 +98,12 @@ std::pair<int,int> apply_video_config(const struct video_config& config, cv::Vid
 			cap.set(cv::CAP_PROP_EXPOSURE,config.exposure_time);
 		if(config.gain>0)
 			cap.set(cv::CAP_PROP_GAIN,config.gain);
+		width=static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
+		height=static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
+		fps=static_cast<int>(cap.get(cv::CAP_PROP_FPS));
 	}
 	if(hikcam.get_handle())
 	{
-		union hikcamera::gettype g;
-		hikcam.get_value(hikcamera::INT,"Width",&g);
-		width=g.stIntValue.nCurValue;
-		hikcam.get_value(hikcamera::INT,"Height",&g);
-		height=g.stIntValue.nCurValue;
 		union hikcamera::settype s;
 		s.eValue=0;
 		hikcam.set_value(hikcamera::ENUM,"TriggerMode",s);
@@ -139,8 +137,25 @@ std::pair<int,int> apply_video_config(const struct video_config& config, cv::Vid
 				hikcam.set_value(hikcamera::FLOAT,"Gain",s);
 			}
 		}
+		union hikcamera::gettype g;
+		hikcam.get_value(hikcamera::INT,"Width",&g);
+		width=g.stIntValue.nCurValue;
+		hikcam.get_value(hikcamera::INT,"Height",&g);
+		height=g.stIntValue.nCurValue;
+		hikcam.get_value(hikcamera::FLOAT,"ResultingFrameRate",&g);
+		fps=g.stFloatValue.fCurValue;
 	}
-	return std::make_pair(width,height);
+	if((mode&8)==8)
+	{
+		std::vector<int> rec_config;
+		if(config.quality>=0)
+			rec_config={cv::VIDEOWRITER_PROP_QUALITY,config.quality};
+		if(config.fourcc[0]>0)
+			rec.open(config.record_file,cv::VideoWriter::fourcc(config.fourcc[0],config.fourcc[1],config.fourcc[2],config.fourcc[3]),fps,cv::Size(width,height),rec_config);
+		else
+			rec.open(config.record_file,config.fourcc[0],fps,cv::Size(width,height),rec_config);
+	}
+	return std::make_pair(std::make_pair(width,height),fps);
 }
 int main(int argc, char* argv[])
 {
@@ -197,10 +212,11 @@ int main(int argc, char* argv[])
 		delete[] armor_engine;
 		return 1;
 	}
+	cv::VideoWriter rec;
 	//Part 3.2 Apply config
-	std::pair<int,int> image_arg=apply_video_config(video_config,cap,hikcam);
+	std::pair<std::pair<int,int>,int> image_arg=apply_video_config(video_config,cap,hikcam,rec);
 	//Part 4 Read image, infer & Show (see infer.cpp)
-	ret=run(car_engine,armor_engine,image_arg,cap,hikcam,video_config.video_device==0);
+	ret=run(car_engine,armor_engine,image_arg,cap,hikcam,rec,video_config.video_device==0);
 	delete[] car_engine;
 	delete[] armor_engine;
 	return ret;

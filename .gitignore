@@ -1,5 +1,6 @@
 build/
 install/
+models/*.engine
 log/
 MvSdkLog/
 .vscode/

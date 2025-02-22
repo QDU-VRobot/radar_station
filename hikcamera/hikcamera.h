@@ -29,6 +29,7 @@ namespace hikcamera
 	{
 	protected:
 		void* handle;
+		bool is_opened;
 	public:
 		static int last_error;
 		explicit camera(const CAMERA_INFO* pstDevInfo=0);
@@ -36,6 +37,10 @@ namespace hikcamera
 		camera& operator=(const camera& cam);
 		static CAMERA_INFO_LIST enum_cameras(unsigned int nTLayerType = MV_GIGE_DEVICE|MV_USB_DEVICE);
 		int open(unsigned int nAccessMode = MV_ACCESS_Control);
+		inline bool isopened(void) const
+		{
+			return is_opened;
+		}
 		inline void* get_handle(void) const
 		{
 			return handle;

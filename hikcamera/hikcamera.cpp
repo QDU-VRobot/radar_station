@@ -2,13 +2,13 @@
 namespace hikcamera
 {
 	int camera::last_error=0;
-	camera::camera(const CAMERA_INFO* pstDevInfo)
+	camera::camera(const CAMERA_INFO* pstDevInfo):is_opened(false)
 	{
 		handle=0;
 		if(pstDevInfo)
 			last_error=MV_CC_CreateHandle(&handle,pstDevInfo);
 	}
-	camera::camera(const camera& cam)
+	camera::camera(const camera& cam):is_opened(cam.is_opened)
 	{
 		handle=0;
 		if(cam.handle)
@@ -22,6 +22,7 @@ namespace hikcamera
 	{
 		camera::~camera();
 		handle=0;
+		is_opened=cam.is_opened;
 		if(cam.handle)
 		{
 			CAMERA_INFO info;
@@ -38,7 +39,9 @@ namespace hikcamera
 	}
 	int camera::open(unsigned int nAccessMode)
 	{
-		return last_error=MV_CC_OpenDevice(handle,nAccessMode);
+		if(!is_opened||(last_error=close())==MV_OK)
+			is_opened=(last_error=MV_CC_OpenDevice(handle,nAccessMode))==MV_OK;
+		return last_error;
 	}
 	int camera::get_value(enum datatype type,const char* strKey,union gettype* value) const
 	{
@@ -113,7 +116,8 @@ namespace hikcamera
 	}
 	int camera::close(void)
 	{
-		return last_error=MV_CC_CloseDevice(handle);
+		is_opened=(last_error=MV_CC_CloseDevice(handle))!=MV_OK;
+		return last_error;
 	}
 	camera::~camera()
 	{

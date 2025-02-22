@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 2.6...3.18)
 
 project(bytetrack CXX)
 
@@ -11,7 +11,6 @@ if(NOT CMAKE_LIBRARY_OUTPUT_DIRECTORY)
 endif()
 option(BUILD_SHARED_LIBS "build shared libraries" ON)
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 find_package(Eigen3 REQUIRED)
 
 set(CMAKE_CXX_STANDARD 98)

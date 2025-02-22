@@ -6,8 +6,7 @@
 #include <utility>
 #include "opencv2/videoio.hpp"
 #include "hikcamera.h"
-int run(const char* car_engine, const char* armor_engine, const std::pair<int,int>& image_arg, cv::VideoCapture& cap, hikcamera::camera& hikcam, bool wait_forever=false);
-//deploy::DetectRes infer(cv::Mat img, deploy::DetectModel* car_model, deploy::DetectModel* armor_model);
+int run(const char* car_engine, const char* armor_engine, const std::pair<const std::pair<int,int>,int>& image_arg, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec, bool wait_forever=false);
 inline bool file_readable(const char* filename)
 {
 	FILE* test=fopen(filename,"rb");
@@ -23,7 +22,7 @@ static size_t getsavename(char* savename, const char* pathname, const char* save
 	const char* fileext=strrchr(pathname,'/');
 	fileext=strrchr(fileext?fileext+1:pathname,'.');
 	size_t extlen=sizeof(saveext);
-	size_t savelen=strlen(pathname)+extlen-(fileext?strlen(fileext):0); //strlen(".onnx")+2==strlen(".engine")
+	size_t savelen=strlen(pathname)+extlen-(fileext?strlen(fileext):0);
 	if(!savename)
 		return savelen;
 	strncpy(savename,pathname,savelen);
