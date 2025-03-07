@@ -1,5 +1,4 @@
 #include "opencv2/core.hpp"
-#include <opencv2/core/utility.hpp>
 #include "opencv2/imgproc.hpp"
 #include "opencv2/calib3d.hpp"
 #include "opencv2/imgcodecs.hpp"
@@ -299,16 +298,12 @@ static bool readStringList( const string& filename, vector<string>& l )
 		string fname = (string)*it;
 		if (dir_pos != string::npos)
 		{
-			string fpath = samples::findFile(filename.substr(0, dir_pos + 1) + fname, false);
+			string fpath = filename.substr(0, dir_pos + 1) + fname;
 			if (fpath.empty())
 			{
-				fpath = samples::findFile(fname);
+				fpath = fname;
 			}
 			fname = fpath;
-		}
-		else
-		{
-			fname = samples::findFile(fname);
 		}
 		l.push_back(fname);
 	}
@@ -433,8 +428,7 @@ int main( int argc, char** argv )
 	showUndistorted = parser.has("su");
 	if ( isdigit(parser.get<string>("@input_data")[0]) )
 		cameraId = parser.get<int>("@input_data");
-	else
-		inputFilename = parser.get<string>("@input_data");
+	inputFilename = parser.get<string>("@input_data");
 	int winSize = parser.get<int>("ws");
 	cameraMatrix = Mat::eye(3, 3, CV_64F);
 	if (parser.has("fx") && parser.has("fy") && parser.has("cx") && parser.has("cy"))
@@ -478,13 +472,13 @@ int main( int argc, char** argv )
 	if ( boardSize.height <= 0 )
 		return fprintf( stderr, "Invalid board height\n" ), -1;
 
-	if( !inputFilename.empty() )
+	if( videotype == IMAGE )
 	{
-		if( videotype == IMAGE && readStringList(samples::findFile(inputFilename), imageList) )
+		if( readStringList(inputFilename, imageList) )
 			mode = CAPTURING;
-		else
-			capture.open(samples::findFileOrKeep(inputFilename));
 	}
+	else if( videotype == VIDEO )
+		capture.open(inputFilename);
 	else if( videotype == HIKCAMERA )
 	{
 		hikcamera::CAMERA_INFO_LIST devlist=hikcamera::camera::enum_cameras();

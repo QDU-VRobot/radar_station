@@ -1,33 +1,36 @@
 #include "hikcamera.h"
+#include <stdexcept>
 namespace hikcamera
 {
 	int camera::last_error=0;
-	camera::camera(const CAMERA_INFO* pstDevInfo):is_opened(false)
+	camera::camera(const CAMERA_INFO* pstDevInfo)
 	{
-		handle=0;
+		handle=0,is_opened=false;
 		if(pstDevInfo)
-			last_error=MV_CC_CreateHandle(&handle,pstDevInfo);
+			camera::open(pstDevInfo);
 	}
-	camera::camera(const camera& cam):is_opened(cam.is_opened)
+	camera::camera(const camera& cam)
 	{
-		handle=0;
+		if(cam.is_opened)
+			throw std::runtime_error("Camera must be closed before copying");
+		handle=0,is_opened=false;
 		if(cam.handle)
 		{
 			CAMERA_INFO info;
-			MV_CC_GetDeviceInfo(cam.handle,&info);
-			last_error=MV_CC_CreateHandle(&handle,&info);
+			if(MV_CC_GetDeviceInfo(cam.handle,&info)==MV_OK)
+				camera::open(&info);
 		}
 	}
 	camera& camera::operator=(const camera& cam)
 	{
+		if(cam.is_opened)
+			throw std::runtime_error("Camera must be closed before copying");
 		camera::~camera();
-		handle=0;
-		is_opened=cam.is_opened;
 		if(cam.handle)
 		{
 			CAMERA_INFO info;
-			MV_CC_GetDeviceInfo(cam.handle,&info);
-			last_error=MV_CC_CreateHandle(&handle,&info);
+			if(MV_CC_GetDeviceInfo(cam.handle,&info)==MV_OK)
+				camera::open(&info);
 		}
 		return *this;
 	}
@@ -37,9 +40,9 @@ namespace hikcamera
 		last_error=MV_CC_EnumDevices(nTLayerType,&pstDevList);
 		return pstDevList;
 	}
-	int camera::open(unsigned int nAccessMode)
+	int camera::open(const CAMERA_INFO* pstDevInfo, unsigned int nAccessMode)
 	{
-		if(!is_opened||(last_error=close())==MV_OK)
+		if((!is_opened||(last_error=close())==MV_OK)&&(handle||(last_error=MV_CC_CreateHandle(&handle,pstDevInfo))==MV_OK))
 			is_opened=(last_error=MV_CC_OpenDevice(handle,nAccessMode))==MV_OK;
 		return last_error;
 	}
@@ -116,12 +119,14 @@ namespace hikcamera
 	}
 	int camera::close(void)
 	{
-		is_opened=(last_error=MV_CC_CloseDevice(handle))!=MV_OK;
+		if((last_error=MV_CC_CloseDevice(handle))==MV_OK)
+			is_opened=false;
 		return last_error;
 	}
 	camera::~camera()
 	{
 		if(handle)
 			last_error=MV_CC_DestroyHandle(handle);
+		handle=0,is_opened=false;
 	}
 }

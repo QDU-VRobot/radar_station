@@ -25,6 +25,7 @@ namespace hikcamera
 	typedef MV_CC_DEVICE_INFO CAMERA_INFO;
 	typedef MV_FRAME_OUT_INFO_EX FRAME_INFO;
 	typedef MV_FRAME_OUT FRAME;
+	enum {OK=MV_OK};
 	class camera
 	{
 	protected:
@@ -32,11 +33,15 @@ namespace hikcamera
 		bool is_opened;
 	public:
 		static int last_error;
-		explicit camera(const CAMERA_INFO* pstDevInfo=0);
+		camera(const CAMERA_INFO* pstDevInfo=0);
 		camera(const camera& cam);
 		camera& operator=(const camera& cam);
+		#if __cplusplus >= 201103L
+		camera(camera&& cam)=default;
+		camera& operator=(camera&& cam)=default;
+		#endif
 		static CAMERA_INFO_LIST enum_cameras(unsigned int nTLayerType = MV_GIGE_DEVICE|MV_USB_DEVICE);
-		int open(unsigned int nAccessMode = MV_ACCESS_Control);
+		int open(const CAMERA_INFO* pstDevInfo=0, unsigned int nAccessMode = MV_ACCESS_Control);
 		inline bool isopened(void) const
 		{
 			return is_opened;
