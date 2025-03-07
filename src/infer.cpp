@@ -207,9 +207,12 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 			armor_model=new deploy::DetectModel(armor_engine,armor_option);
 		}
 	}
-	cv::Mat img,map[2];
+	cv::Mat img,map;
 	if(!cam_matrix.empty())
-		cv::initUndistortRectifyMap(cam_matrix,dist_coeffs,cv::Mat(),cv::Mat(),cv::Size(image_arg.first.first,image_arg.first.second),CV_32FC1,map[0],map[1]);
+	{
+		cv::Mat tmp;
+		cv::initUndistortRectifyMap(cam_matrix,dist_coeffs,cv::Mat(),cv::Mat(),cv::Size(image_arg.first.first,image_arg.first.second),CV_32FC2,map,tmp);
+	}
 	std::pair<vector<STrack>, std::map<int, std::pair<uint8_t,float>>> result;
 	std::cout<<"Video starting"<<std::endl;
 	char key=0;
@@ -222,7 +225,7 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 			if(!cam_matrix.empty())
 			{
 				cv::Mat tmp;
-				cv::remap(img,tmp,map[0],map[1],INTER_LINEAR); //Cannot undistort in-place
+				cv::remap(img,tmp,map,cv::Mat(),INTER_LINEAR); //Cannot undistort in-place
 				img=std::move(tmp);
 			}
 			if((mode&1)==1)
@@ -253,7 +256,7 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 				cv::Mat tmp;
 				cv::cvtColor(img,tmp,cv::COLOR_BayerBG2RGB);
 				if(!cam_matrix.empty())
-					cv::remap(tmp,img,map[0],map[1],INTER_LINEAR);
+					cv::remap(tmp,img,map,cv::Mat(),INTER_LINEAR);
 				else
 					img=std::move(tmp);
 			}
