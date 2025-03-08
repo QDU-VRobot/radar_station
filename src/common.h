@@ -22,7 +22,7 @@ extern struct serial_info
 	uint8_t more_damage:2;
 	uint8_t damaging:1;
 } serial_info;
-int run(const char* car_engine, const char* armor_engine, const std::pair<const std::pair<int,int>,int>& image_arg, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec, serial::terminal& sport, bool wait_forever=false, const cv::Mat& trans_matrix=cv::Mat(), const cv::Mat& cam_matrix=cv::Mat(), const cv::Mat& dist_coeffs=cv::Mat(), const cv::Mat& example_img=cv::Mat(), float scale=1);
+int run(const char* car_engine, const char* armor_engine, const std::pair<const std::pair<int,int>,float>& image_arg, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec, serial::terminal& sport, bool wait_forever=false, const cv::Mat& trans_matrix=cv::Mat(), const cv::Mat& cam_matrix=cv::Mat(), const cv::Mat& dist_coeffs=cv::Mat(), const cv::Mat& example_img=cv::Mat(), float scale=1);
 void receive(serial::terminal* sport,const std::string& filename);
 uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids,bool* lock=0);
 inline bool file_readable(const char* filename)

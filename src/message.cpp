@@ -169,7 +169,7 @@ void receive(serial::terminal* sport,const std::string& filename)
 	{
 		perror("Fatal error detected, disabling serial port");
 		sport->~terminal();
-		mode&=7;
+		mode&=~8;
 	}
 }
 uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids, bool* lock)

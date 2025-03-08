@@ -95,9 +95,10 @@ static int convert(const struct model_config& config, size_t threads, const char
 		delete[] armor_engine;
 	return -1; //Normal
 }
-static std::pair<const std::pair<int,int>,int> apply_video_config(const struct video_config& config, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec)
+static std::pair<const std::pair<int,int>,float> apply_video_config(const struct video_config& config, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec)
 {
-	int width,height,fps;
+	int width,height;
+	float fps;
 	if(cap.isOpened())
 	{
 		if(config.fps>0)
@@ -110,7 +111,7 @@ static std::pair<const std::pair<int,int>,int> apply_video_config(const struct v
 			cap.set(cv::CAP_PROP_GAIN,config.gain);
 		width=static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
 		height=static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
-		fps=static_cast<int>(cap.get(cv::CAP_PROP_FPS));
+		fps=cap.get(cv::CAP_PROP_FPS);
 	}
 	if(hikcam.isopened())
 	{
@@ -161,9 +162,9 @@ static std::pair<const std::pair<int,int>,int> apply_video_config(const struct v
 		if(config.quality>=0)
 			rec_config={cv::VIDEOWRITER_PROP_QUALITY,config.quality};
 		if(config.fourcc[0]>0)
-			rec.open(config.record_file.c_str(),cv::VideoWriter::fourcc(config.fourcc[0],config.fourcc[1],config.fourcc[2],config.fourcc[3]),fps,cv::Size(width,height),rec_config);
+			rec.open(config.record_file.c_str(),cv::VideoWriter::fourcc(config.fourcc[0],config.fourcc[1],config.fourcc[2],config.fourcc[3]),(mode&48)==48?fps*2:fps,cv::Size(width,height),rec_config);
 		else
-			rec.open(config.record_file.c_str(),config.fourcc[0],fps,cv::Size(width,height),rec_config); //Save pictures?
+			rec.open(config.record_file.c_str(),config.fourcc[0],(mode&48)==48?fps*2:fps,cv::Size(width,height),rec_config); //Save pictures?
 	}
 	return std::make_pair(std::make_pair(width,height),fps);
 }
@@ -242,9 +243,9 @@ int main(int argc, char** argv)
 {
 	int ret;
 	//Part 1 Parse config
-	cv::CommandLineParser args(argc,argv,"{help ?||Show this help}{C|camera.yml|Parameter file (*.XML, *.YAML or *.JSON)}{t|4|Threads}{m|15|Mode config (Bit 0: Use car model; Bit 1: Use armor model (car model must be used); Bit 2: Display video; Bit 3: Enable serial port; All 0: Generate engine only)}{w|2|Wait timeout (ms) per cycle}{I|Field.jpg|Field image (black if not set)}{W|28|Field width}{H|15|Field height}{S|40|Field image scale}{s|/dev/ttyS0|Serial device}"
+	cv::CommandLineParser args(argc,argv,"{help ?||Show this help}{C|camera.yml|Parameter file (*.XML, *.YAML or *.JSON)}{t|4|Threads}{m|63|Mode config (Bit 0: Use car model; Bit 1: Use armor model (car model must be used); Bit 2: Display video; Bit 3: Enable serial port; Bit 4: Record original video; Bit 5: Record processed video; All 0: Generate engine only)}{w|2|Wait timeout (ms) per cycle}{I|Field.jpg|Field image (black if not set)}{W|28|Field width}{H|15|Field height}{S|40|Field image scale}{s|/dev/ttyS0|Serial device}"
 	"{B|1033|Builder flags (See NvInfer.h for detail)}{c|models/car.onnx|Car model (ONNX format with plugins)}{a|models/armor.onnx|Armor model (ONNX format with plugins)}{n||No conversion, assume model files are already in TensorRT format}{tensor-width|640|Tensor width}{tensor-height|640|Tensor height}{b|6|Batch size (maximum is doubled)}"
-	"{V|2|Video type (0=Video file, 1=Generic camera (cv::VideoCapture), 2=hikcamera (MVS))}{f|-1|FPS (-1=auto, 0=keep unchanged)}{e|-1|Exposure time (-1=auto, 0=keep unchanged)}{g|-1|Gain (-1=auto)}{R||Record file}{fourcc|avc1|Fourcc code}{q|-1|Quality of recorded video (-1=keep default)}{@file|0|Video device ID or video file}");
+	"{V|2|Video type (0=Video file, 1=Generic camera (cv::VideoCapture), 2=hikcamera (MVS))}{f|-1|FPS (-1=auto, 0=keep unchanged)}{e|-1|Exposure time (-1=auto, 0=keep unchanged)}{g|-1|Gain (-1=auto)}{R||Record output file}{fourcc|avc1|Fourcc code}{q|-1|Quality of recorded video (-1=keep default)}{@file|0|Video device ID or video file}");
 	args.about("Detect cars and armors and (optionally) send their position to the serial port");
 	if(args.has("help"))
 	{
@@ -301,7 +302,7 @@ int main(int argc, char** argv)
 		else
 		{
 			std::cerr<<"Serial port is not available"<<std::endl;
-			mode&=7;
+			mode&=~8;
 		}
 	//Part 4.1 Open video
 	cv::VideoCapture cap;
@@ -337,7 +338,7 @@ int main(int argc, char** argv)
 	{
 		cv::VideoWriter rec;
 		//Part 4.2 Apply config
-		std::pair<std::pair<int,int>,int> image_arg=apply_video_config(video_config,cap,hikcam,rec);
+		std::pair<std::pair<int,int>,float> image_arg=apply_video_config(video_config,cap,hikcam,rec);
 		//Part 4.3 Mark points (if not done)
 		if(trans_matrix.empty()&&(mode&5)==5)
 		{

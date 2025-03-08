@@ -1,6 +1,7 @@
 #include "common.h"
 #include "hikcamera.h"
 #include "serial.h"
+#include <signal.h>
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -23,6 +24,11 @@
 #include "STrack.h"
 extern size_t threads;
 extern std::chrono::milliseconds wait_timeout;
+static void handle_exit(int type)
+{
+	std::cerr<<"Received "<<type<<", exiting"<<std::endl;
+	mode=0;
+}
 static deploy::DetectRes car_infer(const cv::Mat& img, deploy::DetectModel* car_model)
 {
 	return car_model->predict(deploy::Image(img.data,img.cols,img.rows));
@@ -147,8 +153,10 @@ inline char output(cv::Mat& img,const std::pair<const vector<STrack>, const std:
 		if((mode&11)==11&&!serial_busy&&serial_info.robot_id)
 			std::thread(send_pos,&sport,center_points,ids,&serial_busy).detach(); //Use a new thread for a blocking task
 	}
-	if(!img.empty()&&((mode&4)==4||rec.isOpened()))
+	if(!img.empty()&&((mode&4)==4||(mode&48)&&rec.isOpened()))
 	{
+		if((mode&16)==16&&rec.isOpened())
+			rec.write(img);
 		cv::putText(img,std::string("Latency: ")+std::to_string(latency)+"ms",cv::Point(img.cols-255,30),0,1,cv::Scalar(0,255,0),2);
 		cv::putText(img,std::string("State: ")+std::to_string(serial_info.game_progress),cv::Point(5,30),0,1,cv::Scalar(0,255,0),2);
 		cv::putText(img,std::string("Timer: ")+std::to_string(serial_info.stage_remain_time/60)+':'+std::to_string(serial_info.stage_remain_time%60),cv::Point(150,30),0,1,cv::Scalar(0,255,0),2);
@@ -168,7 +176,7 @@ inline char output(cv::Mat& img,const std::pair<const vector<STrack>, const std:
 			if((mode&3)==3&&result.second.count(it->track_id))
 				cv::putText(img,std::to_string(result.second.at(it->track_id).first)+':'+std::to_string(result.second.at(it->track_id).second),cv::Point(it->tlwh[0],it->tlwh[1]+it->tlwh[3]),1,1,cv::Scalar(0,255,0),1);
 		}
-		if(rec.isOpened())
+		if((mode&32)==32&&rec.isOpened())
 			rec.write(img);
 		if((mode&4)==4)
 		{
@@ -184,7 +192,7 @@ inline char output(cv::Mat& img,const std::pair<const vector<STrack>, const std:
 	}
 	return -1;
 }
-int run(const char* car_engine, const char* armor_engine, const std::pair<const std::pair<int,int>,int>& image_arg, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec, serial::terminal& sport, bool wait_forever, const cv::Mat& trans_matrix, const cv::Mat& cam_matrix, const cv::Mat& dist_coeffs, const cv::Mat& example_img, float scale)
+int run(const char* car_engine, const char* armor_engine, const std::pair<const std::pair<int,int>,float>& image_arg, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec, serial::terminal& sport, bool wait_forever, const cv::Mat& trans_matrix, const cv::Mat& cam_matrix, const cv::Mat& dist_coeffs, const cv::Mat& example_img, float scale)
 {
 	unsigned short err_counter=0;
 	deploy::DetectModel *car_model=0,*armor_model=0;
@@ -215,10 +223,11 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 	}
 	std::pair<vector<STrack>, std::map<int, std::pair<uint8_t,float>>> result;
 	std::cout<<"Video starting"<<std::endl;
-	char key=0;
+	if(signal(SIGINT,handle_exit)==SIG_ERR)
+		std::cerr<<"Signal registration failed"<<std::endl;
 	if(cap.isOpened())
 	{
-		while(cap.read(img)&&!img.empty()&&key!=27)
+		while(cap.read(img)&&!img.empty()&&mode)
 		{
 			static std::chrono::steady_clock::time_point old_timestamp=std::chrono::steady_clock::now();
 			std::chrono::steady_clock::time_point now=std::chrono::steady_clock::now();
@@ -231,7 +240,8 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 			if((mode&1)==1)
 				result=threaded_infer(img,car_model,armor_model,tracker,wait_forever);
 			std::cerr<<"Cycle: "<<std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count()<<"ms"<<std::endl;
-			key=output(img,result,trans_matrix,rec,sport,example_img.clone(),scale,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count());
+			if(output(img,result,trans_matrix,rec,sport,example_img.clone(),scale,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count())==27)
+				mode=0;
 			old_timestamp=now;
 		}
 		std::cout<<"Video stopped"<<std::endl;
@@ -246,7 +256,7 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 			return 2;
 		}
 		hikcamera::FRAME frame;
-		while(err_counter<wait_timeout.count()*5000&&key!=27)
+		while(err_counter<wait_timeout.count()*5000&&mode)
 		{
 			err_counter=hikcam.grab_frame(&frame,wait_timeout.count())==hikcamera::OK?0:err_counter+1;
 			static int64_t old_timestamp=frame.stFrameInfo.nHostTimeStamp;
@@ -267,7 +277,8 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 				std::cerr<<"Interval: "<<frame.stFrameInfo.nHostTimeStamp-old_timestamp<<"ms"<<std::endl;
 				cv::cvtColor(img,img,cv::COLOR_RGB2BGR);
 			}
-			key=output(img,result,trans_matrix,rec,sport,example_img.clone(),scale,frame.stFrameInfo.nHostTimeStamp-old_timestamp);
+			if(output(img,result,trans_matrix,rec,sport,example_img.clone(),scale,frame.stFrameInfo.nHostTimeStamp-old_timestamp)==27)
+				mode=0;
 			if(!err_counter)
 			{
 				old_timestamp=frame.stFrameInfo.nHostTimeStamp;
