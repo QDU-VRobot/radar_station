@@ -35,7 +35,7 @@ inline bool file_readable(const char* filename)
 	}
 	return false;
 }
-static size_t getsavename(char* savename, const char* pathname, const char* saveext) //Generate savename based on filename (include path) and saveext
+inline size_t getsavename(char* savename, const char* pathname, const char* saveext) //Generate savename based on filename (include path) and saveext
 {
 	const char* fileext=strrchr(pathname,'/');
 	fileext=strrchr(fileext?fileext+1:pathname,'.');

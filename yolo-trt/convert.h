@@ -19,7 +19,7 @@ public:
 	}
 	ILogger::Severity severity_;
 };
-static bool convert_onnx(const char* filename, const char* savename, uint32_t flag, int32_t threads=1, bool force=false, int64_t imgwidth=0, int64_t imgheight=0, int64_t batchsize=4, const char* inputname="images")
+inline bool convert_onnx(const char* filename, const char* savename, uint32_t flag, int32_t threads=1, bool force=false, int64_t imgwidth=0, int64_t imgheight=0, int64_t batchsize=4, const char* inputname="images")
 {
 	Logger logger;
 	static IBuilder* builder = createInferBuilder(logger);

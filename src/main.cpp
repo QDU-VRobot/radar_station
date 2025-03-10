@@ -36,7 +36,7 @@ struct video_config
 	int quality; //-1=keep original
 };
 static const char* name[2]={"Video","Field"};
-inline int init_hikcamera(hikcamera::camera& hikcam, uint8_t device_num)
+static inline int init_hikcamera(hikcamera::camera& hikcam, uint8_t device_num)
 {
 	hikcamera::CAMERA_INFO_LIST devlist=hikcamera::camera::enum_cameras(); //USB cameras must be enumerated before opening
 	if(devlist.nDeviceNum<=device_num)

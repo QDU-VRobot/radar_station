@@ -33,7 +33,7 @@ static deploy::DetectRes car_infer(const cv::Mat& img, deploy::DetectModel* car_
 {
 	return car_model->predict(deploy::Image(img.data,img.cols,img.rows));
 }
-inline std::map<int, std::pair<uint8_t,float>> armor_infer(const std::vector<cv::Mat>& armors, std::vector<int>& ids, deploy::DetectModel* armor_model)
+static std::map<int, std::pair<uint8_t,float>> armor_infer(const std::vector<cv::Mat>& armors, std::vector<int>& ids, deploy::DetectModel* armor_model)
 {
 	static std::map<int,std::pair<uint8_t,float>> tracking;
 	std::vector<deploy::Image> imgs;
@@ -79,7 +79,7 @@ inline std::map<int, std::pair<uint8_t,float>> armor_infer(const std::vector<cv:
 	}
 	return tracking;
 }
-inline std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,float>>> threaded_infer(const cv::Mat& img, const deploy::DetectModel* car_model, deploy::DetectModel* armor_model=0, BYTETracker* tracker=0, bool wait_forever=false)
+static std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,float>>> threaded_infer(const cv::Mat& img, const deploy::DetectModel* car_model, deploy::DetectModel* armor_model=0, BYTETracker* tracker=0, bool wait_forever=false)
 {
 	static std::deque<std::future<deploy::DetectRes>> thread_pool;
 	static std::vector<std::unique_ptr<deploy::DetectModel>> car_model_pool;
@@ -128,7 +128,7 @@ inline std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,flo
 	std::cerr<<"Threads (Using/Pool/Max): "<<thread_pool.size()<<'/'<<car_model_pool.size()<<'/'<<threads<<std::endl;
 	return std::make_pair(tracked,track_id);
 }
-inline char output(cv::Mat& img,const std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,float>>>& result, const cv::Mat& trans_matrix, cv::VideoWriter& rec, serial::terminal& sport, cv::Mat&& example_img, float scale, unsigned short latency=0)
+static char output(cv::Mat& img,const std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,float>>>& result, const cv::Mat& trans_matrix, cv::VideoWriter& rec, serial::terminal& sport, cv::Mat&& example_img, float scale, unsigned short latency=0)
 {
 	static bool serial_busy=false; //Prevent infinite thread creation
 	std::vector<cv::Point2f> center_points; //Mark to the minimap and send to server

@@ -100,15 +100,18 @@ void receive(serial::terminal* sport,const std::string& filename)
 	int state;
 	while(sport->get_fd()>=0||(state=!open_serial(*sport,filename.c_str())))
 	{
-		state=sport->read_wCRC8(&buf.header,sizeof(buf.header));
-		if(state!=0&&state<static_cast<int>(sizeof(buf.header)))
+		state=sport->read(&buf.header,1);
+		if(state<0)
 			break;
 		if(buf.header.SOF!=0xA5)
 		{
 			fprintf(stderr,"Invalid header: %#0hhX\n",buf.header.SOF);
-			state=sizeof(buf.header);
+			continue;
 		}
-		if(state==sizeof(buf.header))
+		state=sport->read_wCRC8(&buf.header,sizeof(buf.header),1);
+		if(state!=0&&state<static_cast<int>(sizeof(buf.header)-1))
+			break;
+		if(state==sizeof(buf.header)-1)
 		{
 			sport->read(&buf.data,sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail));
 			continue;
