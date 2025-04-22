@@ -21,6 +21,7 @@ Usage:
 
 Libraries used in this repository:
 * [OpenCV](https://opencv.org/releases)
+* [Eigen3](https://gitlab.com/libeigen/eigen)
 * [CUDA & TensorRT](https://developer.nvidia.com/cuda-downloads)
 * [TensorRT-YOLO](https://github.com/laugh12321/TensorRT-YOLO)
 * [ByteTrack](https://github.com/ifzhang/ByteTrack)
