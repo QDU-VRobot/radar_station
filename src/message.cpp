@@ -1,10 +1,10 @@
 #include "serial.h"
 #include "common.h"
 #include "RM_CRC.h"
-#include <cstddef>
 #include <stdio.h>
 #include <algorithm>
 #include <string>
+#include <chrono>
 #define MAX_BUF 256
 //See RoboMaster file
 #pragma pack(1)
@@ -66,6 +66,25 @@ union map_robot
 	};
 	uint16_t data[12];
 };
+union robot_pos
+{
+	struct
+	{
+		float hero_x;
+		float hero_y;
+		float engineer_x;
+		float engineer_y;
+		float standard_3_x;
+		float standard_3_y;
+		float standard_4_x;
+		float standard_4_y;
+		float standard_5_x;
+		float standard_5_y;
+		float sentry_x;
+		float sentry_y;
+	};
+	float data[12];
+};
 union frame
 {
 	struct
@@ -83,7 +102,11 @@ union frame
 			struct
 			{
 				struct robot_interaction_data_header rheader;
-				uint8_t radar_cmd;
+				union
+				{
+					uint8_t radar_cmd;
+					union robot_pos robot_pos;
+				};
 			};
 			union map_robot map_robot;
 		};
@@ -92,7 +115,9 @@ union frame
 };
 typedef uint16_t frame_tail;
 #pragma pack()
-struct serial_info serial_info;
+volatile struct serial_info serial_info;
+static volatile cv::Point2f pos_from_sentry[6];
+static volatile uint8_t count_remaining[6]={0}; //cache for a while
 extern std::vector<std::vector<uint8_t>> robot_classes;//HERO=0,ENGINEER,INFANTRY3,INFANTRY4,INFANTRY5,SENTRY
 void receive(serial::terminal* sport,const std::string& filename)
 {
@@ -152,7 +177,7 @@ void receive(serial::terminal* sport,const std::string& filename)
 				break;
 			case 0x020C:
 				printf("Marked: ");
-				for(uint8_t i=1<<5;i>0;i>>=1)
+				for(uint8_t i=1<<4;i>0;i>>=1)
 					printf("%c",serial_info.mark_progress&i?'1':'0');
 				serial_info.mark_progress=buf.mark_progress;
 				break;
@@ -165,6 +190,19 @@ void receive(serial::terminal* sport,const std::string& filename)
 				for(size_t i=sizeof(buf.header)+sizeof(buf.cmd_id)+sizeof(buf.rheader);i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length;++i)
 					printf("%0hhX ",buf.data[i]);
 				printf("\n");
+				switch(buf.rheader.data_cmd_id)
+				{
+					case 0x0279:
+						for(size_t i=0;i<6;++i)
+							if(buf.robot_pos.data[i*2]>0&&buf.robot_pos.data[i*2+1]>0)
+							{
+								count_remaining[i]=0; //Make sure the pos being modified is not used
+								printf("Robot position updated (%zu)\n",i);
+								pos_from_sentry[i].x=buf.robot_pos.data[i*2],pos_from_sentry[i].y=buf.robot_pos.data[i*2+1];
+								count_remaining[i]=5;
+							}
+						break;
+				}
 				break;
 		}
 	}
@@ -178,32 +216,62 @@ void receive(serial::terminal* sport,const std::string& filename)
 uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids, bool* lock)
 {
 	union frame buf={{{0x5A,sizeof(union map_robot),0},0x0305,{.map_robot={.data={0}}}}};
-	uint8_t team=serial_info.robot_id/100;
+	uint8_t team=serial_info.robot_id/100,ret=0;
+	union robot_pos pos={.data={0}};
 	size_t count=0;
 	static uint8_t damaged=0;
+	static std::chrono::steady_clock::time_point last_time=std::chrono::steady_clock::now();
+	std::chrono::steady_clock::time_point time=std::chrono::steady_clock::now();
+	for(size_t i=0;i<6;++i)
+		if(count_remaining[i]&&--count_remaining[i])
+			pos.data[i*2]=pos_from_sentry[i].x,pos.data[i*2+1]=pos_from_sentry[i].y,++count;
 	for(size_t i=0,id;i<ids.size();++i)
-		if(ids[i]!=-1&&(id=std::find(robot_classes[team].begin(),robot_classes[team].end(),ids[i])-robot_classes[team].begin())<6)
-			buf.map_robot.data[id*2]=center_points[i].x*100,buf.map_robot.data[id*2+1]=center_points[i].y*100,++count; //Convert unit (m->cm)
-	Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
-	if(sport->write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
+		if(ids[i]!=-1&&(id=std::find(robot_classes[team].begin(),robot_classes[team].end(),ids[i])-robot_classes[team].begin())<6&&!count_remaining[id])
+			pos.data[id*2]=center_points[i].x,pos.data[id*2+1]=center_points[i].y,++count; //Convert unit (m->cm)
+	if(count>0)
 	{
-		if(lock)
-			*lock=false;
-		return 0;
+		if(std::chrono::duration_cast<std::chrono::milliseconds>(time-last_time).count()>=100)
+		{
+			last_time=time;
+			for(size_t i=0;i<sizeof(union robot_pos)/sizeof(float);++i)
+				buf.map_robot.data[i]=pos.data[i]*100;
+			Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
+			if(sport->write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
+			{
+				if(lock)
+					*lock=false;
+				return ret;
+			}
+			ret|=1;
+			buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.robot_pos);
+			buf.cmd_id=0x0301;
+			buf.rheader.data_cmd_id=0x0297,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=team*100+7;
+			buf.robot_pos=pos;
+			Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
+			if(sport->write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
+			{
+				if(lock)
+					*lock=false;
+				return ret;
+			}
+			ret|=4;
+		}
+		if(count>=3&&!serial_info.damaging&&damaged<serial_info.more_damage)
+		{
+			buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.radar_cmd);
+			buf.cmd_id=0x0301;
+			buf.rheader.data_cmd_id=0x0121,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=0x8080;
+			buf.radar_cmd=++damaged;
+			Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
+			if(sport->write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
+			{
+				if(lock)
+					*lock=false;
+				return ret;
+			}
+			ret|=2;
+		}
 	}
-	uint8_t ret;
-	if(count>=3&&!serial_info.damaging&&damaged<serial_info.more_damage)
-	{
-		buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.radar_cmd);
-		buf.cmd_id=0x0301;
-		buf.rheader.data_cmd_id=0x0121,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=0x8080;
-		buf.radar_cmd=++damaged;
-		Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
-		if(sport->write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
-			ret=1;
-		else ret=2;
-	}
-	else ret=1;
 	if(lock)
 		*lock=false;
 	return ret;

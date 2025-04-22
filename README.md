@@ -2,7 +2,7 @@
 Detect robots by their cars and armors with monocular camera and YOLO  
 Designed for and tested on Linux
 
-State: 2D implemented
+State: 2.5D (with fixed height) implemented
 
 Usage:
 1. Install compilers and dependencies (CUDA, TensorRT and MVS, plus **git** for cloning and **cmake** for building)

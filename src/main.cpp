@@ -5,7 +5,7 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include <utility>
+#include <tuple>
 #include <string>
 #include "opencv2/calib3d.hpp"
 #include "opencv2/core.hpp"
@@ -95,7 +95,7 @@ static int convert(const struct model_config& config, size_t threads, const char
 		delete[] armor_engine;
 	return -1; //Normal
 }
-static std::pair<const std::pair<int,int>,float> apply_video_config(const struct video_config& config, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec)
+static std::tuple<int,int,float> apply_video_config(const struct video_config& config, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec)
 {
 	int width,height;
 	float fps;
@@ -166,55 +166,128 @@ static std::pair<const std::pair<int,int>,float> apply_video_config(const struct
 		else
 			rec.open(config.record_file.c_str(),config.fourcc[0],(mode&48)==48?fps*2:fps,cv::Size(width,height),rec_config); //Save pictures?
 	}
-	return std::make_pair(std::make_pair(width,height),fps);
+	return std::make_tuple(width,height,fps);
 }
+static void adjust_height(int pos, void *userdata)
+{
+	*(reinterpret_cast<unsigned int*>(userdata))=pos;
+}
+struct mark_flag
+{
+	uint8_t type:1;
+	uint8_t step:2; //0-finished; 1-mark points; 2-mark contour
+};
 static void mark(int event, int x, int y, int flags, void *userdata)
 {
 	static cv::Mat marked_img[2];
-	std::pair<std::pair<uint8_t&,uint8_t>,std::pair<const cv::Mat&,cv::Point2f(&)[4]>>& arg=*(reinterpret_cast<std::pair<std::pair<uint8_t&,uint8_t>,std::pair<const cv::Mat&,cv::Point2f(&)[4]>>*>(userdata));
-	const uint8_t state=arg.first.first>>arg.first.second*3;
-	if(marked_img[arg.first.second].empty())
-		arg.second.first.copyTo(marked_img[arg.first.second]);
+	std::tuple<struct mark_flag&,const cv::Mat&,void*,const unsigned int&,void*>& arg=*(reinterpret_cast<std::tuple<struct mark_flag&,const cv::Mat&,void*,const unsigned int&,void*>*>(userdata));
+	if(marked_img[std::get<0>(arg).type].empty())
+		std::get<1>(arg).copyTo(marked_img[std::get<0>(arg).type]);
 	switch(event)
 	{
 		case -1:
 			break;
 		case cv::EVENT_LBUTTONDOWN:
 			//Mark
-			if(!(state&4))
+		{
+			cv::Point2f point(x,y);
+			switch(std::get<0>(arg).step)
 			{
-				arg.second.second[state&3].x=x,arg.second.second[state&3].y=y;
-				cv::circle(marked_img[arg.first.second],arg.second.second[state&3],2,cv::Scalar(0,255,0),cv::LineTypes::FILLED);
-				arg.first.first+=1<<arg.first.second*3;
+				case 1:
+					if(std::get<0>(arg).type==0)
+						reinterpret_cast<std::vector<cv::Point2f>*>(std::get<2>(arg))->push_back(point);
+					else if(std::get<0>(arg).type==1)
+						reinterpret_cast<std::vector<cv::Point3f>*>(std::get<2>(arg))->emplace_back(x,y,std::get<3>(arg)*0.01);
+				cv::circle(marked_img[std::get<0>(arg).type],point,2,cv::Scalar(0,255,0),cv::LineTypes::FILLED);
+				break;
+				case 0:
+					if(std::get<0>(arg).type==0)
+					{
+						std::vector<std::pair<std::vector<cv::Point2f>,float>>* contours=reinterpret_cast<std::vector<std::pair<std::vector<cv::Point2f>,float>>*>(std::get<4>(arg));
+						contours->resize(contours->size()+1);
+						std::get<0>(arg).step=2;
+					}
+				case 2:
+					if(std::get<0>(arg).type==0)
+					{
+						reinterpret_cast<std::vector<std::pair<std::vector<cv::Point2f>,float>>*>(std::get<4>(arg))->back().first.push_back(point);
+						cv::circle(marked_img[std::get<0>(arg).type],point,2,cv::Scalar(0,255,255),cv::LineTypes::FILLED);
+					}
+					break;
 			}
+		}
 			break;
 		case cv::EVENT_RBUTTONDOWN:
 			//Line & finish
-			if((state&7)==4)
+			switch(std::get<0>(arg).step)
 			{
-				for(size_t i=0;i<4;++i)
-					cv::line(marked_img[arg.first.second],arg.second.second[i],arg.second.second[i+1&3],cv::Scalar(0,255,0),2);
-				arg.first.first|=7<<arg.first.second*3;
-				if(arg.first.first==077)
-					std::cout<<"Press any other key to finish"<<std::endl;
+				case 1:
+					if(std::get<0>(arg).type==0)
+					{
+						std::vector<cv::Point2f>* points=reinterpret_cast<std::vector<cv::Point2f>*>(std::get<2>(arg));
+						if(points->size()>=4)
+						{
+							for(auto i=points->begin();i!=points->end();++i)
+								cv::line(marked_img[std::get<0>(arg).type],*i,i+1==points->end()?*points->begin():*(i+1),cv::Scalar(0,255,0),2);
+							std::cout<<"Marked "<<points->size()<<" points on "<<name[std::get<0>(arg).type]<<std::endl;
+							std::get<0>(arg).step=0;
+							std::cout<<"Now mark a contour for different heights"<<std::endl;
+						}
+					}
+					else if(std::get<0>(arg).type==1)
+					{
+						std::vector<cv::Point3f>* points=reinterpret_cast<std::vector<cv::Point3f>*>(std::get<2>(arg));
+						if(points->size()>=4)
+						{
+							for(auto i=points->begin();i!=points->end();++i)
+								cv::line(marked_img[std::get<0>(arg).type],cv::Point2f(i->x,i->y),i+1==points->end()?cv::Point2f(points->begin()->x,points->begin()->y):cv::Point2f((i+1)->x,(i+1)->y),cv::Scalar(0,255,0),2);
+							std::cout<<"Marked "<<points->size()<<" points on "<<name[std::get<0>(arg).type]<<std::endl;
+							std::get<0>(arg).step=0;
+						}
+					}
+					break;
+				case 2:
+					if(std::get<0>(arg).type==0)
+					{
+						std::vector<std::pair<std::vector<cv::Point2f>,float>>* contours=reinterpret_cast<std::vector<std::pair<std::vector<cv::Point2f>,float>>*>(std::get<4>(arg));
+						if(contours->back().first.size()>=3)
+						{
+							for(auto i=contours->back().first.begin();i!=contours->back().first.end();++i)
+								cv::line(marked_img[std::get<0>(arg).type],*i,i+1==contours->back().first.end()?*contours->back().first.begin():*(i+1),cv::Scalar(0,255,255),2);
+							contours->back().second=std::get<3>(arg)*0.01;
+							std::cout<<"Marked a contour with "<<contours->back().first.size()<<" points on "<<name[std::get<0>(arg).type]<<std::endl;
+							std::get<0>(arg).step=0;
+						}
+					}
+					break;
 			}
 			break;
 		case cv::EVENT_MBUTTONDOWN:
 			//Clear
-			arg.first.first&=~(7<<arg.first.second*3);
-			marked_img[arg.first.second].release();
-			cv::imshow(name[arg.first.second],arg.second.first);
+			std::get<0>(arg).step=1;
+			if(std::get<0>(arg).type==0)
+				reinterpret_cast<std::vector<cv::Point2f>*>(std::get<2>(arg))->resize(0),reinterpret_cast<std::vector<std::pair<std::vector<cv::Point2f>,float>>*>(std::get<4>(arg))->resize(0);
+			else if(std::get<0>(arg).type==1)
+				reinterpret_cast<std::vector<cv::Point3f>*>(std::get<2>(arg))->resize(0);
+			marked_img[std::get<0>(arg).type].release();
+			cv::imshow(name[std::get<0>(arg).type],std::get<1>(arg));
 		default:
 			return;
 	}
-	cv::imshow(name[arg.first.second],marked_img[arg.first.second]);
+	cv::imshow(name[std::get<0>(arg).type],marked_img[std::get<0>(arg).type]);
 }
-static cv::Mat mark_points(const cv::Mat& img, const cv::Mat& minimap, float scale)
+static std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>,float>>> mark_points(const cv::Mat& img, const cv::Mat& minimap, const cv::Mat& cam_matrix, const cv::Mat& dist_coeffs, float scale)
 {
-	cv::Point2f points[2][4];
-	uint8_t state=0,key=0; //State bit 0-2: Video marked points counter; bit 3-5: Minimap marked points counter
+	std::vector<cv::Point2f> video_points;
+	std::vector<cv::Point3f> map_points;
+	std::vector<std::pair<std::vector<cv::Point2f>,float>> contours;
+	uint8_t key=0;
+	struct mark_flag state[2]={{0,1},{1,1}};
+	unsigned int z=0,contour_height=20;
 	cv::namedWindow(name[0]),cv::namedWindow(name[1]);
-	std::pair<std::pair<uint8_t&,uint8_t>,std::pair<const cv::Mat&,cv::Point2f(&)[4]>> video_arg=std::make_pair(std::make_pair(std::ref(state),0),std::make_pair(std::ref(img),std::ref(points[0]))),image_arg=std::make_pair(std::make_pair(std::ref(state),1),std::make_pair(std::ref(minimap),std::ref(points[1])));
+	std::tuple<struct mark_flag&,const cv::Mat&,void*,const unsigned int&,void*> video_arg=std::make_tuple(std::ref(state[0]),std::ref(img),&video_points,std::ref(contour_height),&contours),image_arg=std::make_tuple(std::ref(state[1]),std::ref(minimap),&map_points,std::ref(z),(void*)0);
+	cv::createTrackbar("Height of contour (cm)",name[0],reinterpret_cast<int*>(&contour_height),100,adjust_height,&contour_height);
+	cv::createTrackbar("Height of next point (cm)",name[1],reinterpret_cast<int*>(&z),100,adjust_height,&z);
 	cv::setMouseCallback(name[0],mark,&video_arg),cv::setMouseCallback(name[1],mark,&image_arg);
 	std::cout<<"Left click on the window anticlockwise to mark points; Right click to confirm; Middle click to reset\nPress 'c' for CLI input"<<std::endl;
 	do
@@ -222,28 +295,70 @@ static cv::Mat mark_points(const cv::Mat& img, const cv::Mat& minimap, float sca
 		mark(-1,0,0,0,&video_arg),mark(-1,0,0,0,&image_arg); //Manually trigger mouse event to show image
 		key=cv::waitKey();
 	}
-	while(state!=077&&key!=27&&key!='c'&&key!='C');
+	while((state[0].step!=0||state[1].step!=0||map_points.size()!=video_points.size())&&key!=27&&key!='c'&&key!='C');
 	cv::destroyAllWindows();
-	if(key==27) //ESC
-		return cv::Mat();
-	if(key=='c'||key=='C')
-		for(size_t i=0;i<2;++i)
+	cv::Mat rvec,tvec;
+	if(key!=27) //ESC
+	{
+		if(key=='c'||key=='C')
 		{
-			std::cout<<"Input 4 points' x and y corresponding to the "<<(i?"map":"video")<<": ";
-			for(size_t j=0;j<4;++j)
-				if(!(std::cin>>points[i][j].x>>points[i][j].y))
-					return cv::Mat();
+			float x,y,z;
+			char c;
+			std::cout<<"Input points' x, y and z corresponding to the map within a line: ";
+			do
+			{
+				if(!(std::cin>>x>>y>>z))
+					return std::make_tuple(rvec,tvec,contours);
+				map_points.emplace_back(x,y,z);
+			}
+			while(std::cin.get(c)&&(map_points.size()<4||c!='\n'));
+			std::cout<<"Input points' x and y corresponding to the video within a line: ";
+			do
+			{
+				if(!(std::cin>>x>>y))
+					return std::make_tuple(rvec,tvec,contours);
+				video_points.emplace_back(x,y);
+			}
+			while(std::cin.get(c)&&(video_points.size()<4||c!='\n'));
+			std::cout<<"Creating contours: "<<std::endl;
+			do
+			{
+				std::vector<cv::Point2f> points;
+				std::cout<<"Input points' x and y in the video within a line: "<<std::endl;
+				do
+				{
+					if(std::cin>>x>>y)
+						points.emplace_back(x,y);
+					else
+					{
+						points.resize(0);
+						break;
+					}
+				}
+				while(std::cin.get(c)&&(points.size()<3||c!='\n'));
+				if(points.size())
+				{
+					std::cout<<"Input height (then input other characters to finish): "<<std::endl;
+					if(std::cin>>z)
+						contours.emplace_back(std::move(points),z);
+				}
+				else
+					break;
+			}
+			while(std::cin.get(c)&&c=='\n');
 		}
-	else
-		for(size_t j=0;j<4;++j)
-			points[1][j]/=scale; //Scale to field position
-	return cv::getPerspectiveTransform(points[0],points[1]);
+		else
+			for(auto i=map_points.begin();i!=map_points.end();++i)
+				i->x/=scale,i->y=(minimap.rows-i->y)/scale; //Scale to field position
+		cv::solvePnP(map_points,video_points,cam_matrix.empty()?calculateCameraMatrix(img.size(),acos(0.5)):cam_matrix,dist_coeffs,rvec,tvec);
+	}
+	return std::make_tuple(rvec,tvec,contours);
 }
 int main(int argc, char** argv)
 {
 	int ret;
 	//Part 1 Parse config
-	cv::CommandLineParser args(argc,argv,"{help ?||Show this help}{C|camera.yml|Parameter file (*.XML, *.YAML or *.JSON)}{t|4|Threads}{m|63|Mode config (Bit 0: Use car model; Bit 1: Use armor model (car model must be used); Bit 2: Display video; Bit 3: Enable serial port; Bit 4: Record original video; Bit 5: Record processed video; All 0: Generate engine only)}{w|2|Wait timeout (ms) per cycle}{I|Field.jpg|Field image (black if not set)}{W|28|Field width}{H|15|Field height}{S|40|Field image scale}{s|/dev/ttyS0|Serial device}"
+	cv::CommandLineParser args(argc,argv,"{help ?||Show this help}{C|config.yml|Parameter file (*.XML, *.YAML or *.JSON)}{t|4|Threads}{m|63|Mode config (Bit 0: Use car model; Bit 1: Use armor model (car model must be used); Bit 2: Display video; Bit 3: Enable serial port; Bit 4: Record original video; Bit 5: Record processed video; All 0: Generate engine only)}{w|2|Wait timeout (ms) per cycle}{I|Field.jpg|Field image (black if not set)}{W|28|Field width}{H|15|Field height}{S|40|Field image scale}{s|/dev/ttyS0|Serial device}"
 	"{B|1033|Builder flags (See NvInfer.h for detail)}{c|models/car.onnx|Car model (ONNX format with plugins)}{a|models/armor.onnx|Armor model (ONNX format with plugins)}{n||No conversion, assume model files are already in TensorRT format}{tensor-width|640|Tensor width}{tensor-height|640|Tensor height}{b|6|Batch size (maximum is doubled)}"
 	"{V|2|Video type (0=Video file, 1=Generic camera (cv::VideoCapture), 2=hikcamera (MVS))}{f|-1|FPS (-1=auto, 0=keep unchanged)}{e|-1|Exposure time (-1=auto, 0=keep unchanged)}{g|-1|Gain (-1=auto)}{R||Record output file}{fourcc|avc1|Fourcc code}{q|-1|Quality of recorded video (-1=keep default)}{@file|0|Video device ID or video file}");
 	args.about("Detect cars and armors and (optionally) send their position to the serial port");
@@ -255,12 +370,23 @@ int main(int argc, char** argv)
 	mode=args.get<unsigned>("m"),threads=args.get<size_t>("t"),wait_timeout=std::chrono::milliseconds(args.get<unsigned>("w"));
 	struct model_config model_config={args.get<uint32_t>("B"),args.get<std::string>("c"),args.get<std::string>("a"),args.has("n")?0:".engine",args.get<int>("tensor-width"),args.get<int>("tensor-height"),args.get<int>("b")};
 	struct video_config video_config={args.get<unsigned>("V"),args.get<std::string>("@file"),args.get<unsigned>("V")!=0?args.get<unsigned>("@file"):0,args.get<float>("f"),args.get<float>("e"),args.get<float>("g"),args.get<std::string>("R"),args.get<std::string>("fourcc"),args.get<int>("q")};
-	cv::Mat trans_matrix,cam_matrix,dist_coeffs,example_img;
+	cv::Mat cam_matrix,dist_coeffs,example_img;
+	std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>,float>>> pose_points;
 	if(args.has("C"))
 	{
 		cv::FileStorage config(args.get<std::string>("C"),cv::FileStorage::Mode::READ);
 		if(config.isOpened())
-			config["camera_matrix"]>>cam_matrix,config["distortion_coefficients"]>>dist_coeffs,config["perspective_matrix"]>>trans_matrix,config["robot_classes"]>>robot_classes;
+		{
+			std::vector<std::vector<cv::Point2f>> points;
+			std::vector<float> heights;
+			config["camera_matrix"]>>cam_matrix,config["distortion_coefficients"]>>dist_coeffs;
+			config["rvec"]>>std::get<0>(pose_points),config["tvec"]>>std::get<1>(pose_points);
+			config["contours"]>>points,config["contour_heights"]>>heights;
+			config["robot_classes"]>>robot_classes;
+			heights.resize(points.size());
+			for(size_t i=0;i<points.size();++i)
+				std::get<2>(pose_points).emplace_back(std::move(points[i]),heights[i]);
+		}
 		else
 			std::cerr<<"Failed to open "<<args.get<std::string>("C")<<", ignoring"<<std::endl;
 	}
@@ -338,9 +464,9 @@ int main(int argc, char** argv)
 	{
 		cv::VideoWriter rec;
 		//Part 4.2 Apply config
-		std::pair<std::pair<int,int>,float> image_arg=apply_video_config(video_config,cap,hikcam,rec);
+		std::tuple<int,int,float> image_arg=apply_video_config(video_config,cap,hikcam,rec);
 		//Part 4.3 Mark points (if not done)
-		if(trans_matrix.empty()&&(mode&5)==5)
+		if((std::get<0>(pose_points).empty()||std::get<1>(pose_points).empty())&&(mode&5)==5)
 		{
 			cv::Mat img;
 			if(cap.isOpened())
@@ -361,32 +487,36 @@ int main(int argc, char** argv)
 			}
 			if(!img.empty())
 			{
-				if(!cam_matrix.empty())
-				{
-					cv::Mat tmp;
-					cv::undistort(img,tmp,cam_matrix,dist_coeffs);
-					img=std::move(tmp);
-				}
 				std::cerr<<"Marking field points"<<std::endl;
-				if(!(trans_matrix=mark_points(img,example_img,args.get<float>("S"))).empty())
+				pose_points=mark_points(img,example_img,cam_matrix,dist_coeffs,args.get<float>("S"));
+				if(args.has("C"))
 				{
-					if(args.has("C"))
+					cv::FileStorage config(args.get<std::string>("C"),cv::FileStorage::Mode::APPEND);
+					if(config.isOpened())
 					{
-						cv::FileStorage config(args.get<std::string>("C"),cv::FileStorage::Mode::APPEND);
-						if(config.isOpened())
+						if(!std::get<0>(pose_points).empty()&&!std::get<1>(pose_points).empty())
 						{
-							config<<"perspective_matrix"<<trans_matrix;
+							config<<"rvec"<<std::get<0>(pose_points)<<"tvec"<<std::get<1>(pose_points);
+							std::cout<<"Saved to "<<args.get<std::string>("C")<<std::endl;
+						}
+						if(std::get<2>(pose_points).size())
+						{
+							std::vector<std::vector<cv::Point2f>> points;
+							std::vector<float> heights;
+							for(auto i=std::get<2>(pose_points).begin();i!=std::get<2>(pose_points).end();++i)
+								points.push_back(i->first),heights.push_back(i->second);
+							config<<"contours"<<points<<"contour_heights"<<heights;
 							std::cout<<"Saved to "<<args.get<std::string>("C")<<std::endl;
 						}
 					}
 				}
-				else std::cerr<<"Marking cancelled"<<std::endl;
+				else std::cerr<<"Config not saved!"<<std::endl;
 			}
 			else std::cerr<<"Image is empty"<<std::endl;
 		}
-		std::cout<<"Perspective matrix:\n"<<trans_matrix<<std::endl;
+		std::cout<<"rvec:\n"<<std::get<0>(pose_points)<<"\ntvec:\n"<<std::get<1>(pose_points)<<"\ncontours count: "<<std::get<2>(pose_points).size()<<std::endl;
 		//Part 5 Read image, infer & Show (see infer.cpp)
-		ret=run(model_config.save_ext?car_engine:model_config.car_file.c_str(),model_config.save_ext?armor_engine:model_config.armor_file.c_str(),image_arg,cap,hikcam,rec,sport,video_config.video_device==0,trans_matrix,cam_matrix,dist_coeffs,example_img,args.get<float>("S"));
+		ret=run(model_config.save_ext?car_engine:model_config.car_file.c_str(),model_config.save_ext?armor_engine:model_config.armor_file.c_str(),image_arg,cap,hikcam,rec,sport,video_config.video_device==0,pose_points,cam_matrix,dist_coeffs,example_img,args.get<float>("S"));
 	}
 	if(model_config.save_ext)
 	{

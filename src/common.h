@@ -3,7 +3,7 @@
 
 #include <string.h>
 #include <stdio.h>
-#include <utility>
+#include <tuple>
 #include <vector>
 #include "opencv2/core.hpp"
 #include "opencv2/videoio.hpp"
@@ -13,7 +13,7 @@
 extern "C"
 {
 extern uint8_t mode;
-extern struct serial_info
+extern volatile struct serial_info
 {
 	uint16_t stage_remain_time;
 	uint8_t robot_id;
@@ -22,7 +22,7 @@ extern struct serial_info
 	uint8_t more_damage:2;
 	uint8_t damaging:1;
 } serial_info;
-int run(const char* car_engine, const char* armor_engine, const std::pair<const std::pair<int,int>,float>& image_arg, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec, serial::terminal& sport, bool wait_forever=false, const cv::Mat& trans_matrix=cv::Mat(), const cv::Mat& cam_matrix=cv::Mat(), const cv::Mat& dist_coeffs=cv::Mat(), const cv::Mat& example_img=cv::Mat(), float scale=1);
+int run(const char* car_engine, const char* armor_engine, const std::tuple<int,int,float>& image_arg, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec, serial::terminal& sport, bool wait_forever=false, const std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>,float>>>& pose_points=std::make_tuple(cv::Mat(),cv::Mat(),std::vector<std::pair<std::vector<cv::Point2f>,float>>()), const cv::Mat& cam_matrix=cv::Mat(), const cv::Mat& dist_coeffs=cv::Mat(), const cv::Mat& example_img=cv::Mat(), float scale=1);
 void receive(serial::terminal* sport,const std::string& filename);
 uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids,bool* lock=0);
 inline bool file_readable(const char* filename)
@@ -58,6 +58,18 @@ inline bool open_serial(serial::terminal& port, const char* filename)
 	port.options.c_oflag&=~OPOST;
 	port.options.c_lflag&=~(ICANON|ECHO|ISIG);
 	return port.apply_options()==0;
+}
+inline cv::Mat calculateCameraMatrix(cv::Size imgsize, double fov)
+{
+	double f=0.5/tan(fov/2);
+	return cv::Mat_<double>(3,3)<<imgsize.width*f,0,imgsize.width/2,0,imgsize.height*f,imgsize.height/2,0,0,1;
+}
+inline cv::Point2f backProjectPoint(cv::Point3d imagePoint, const cv::Mat& m1, const cv::Mat& m2)
+{
+	cv::Mat tmp=m1*cv::Mat(cv::Point3d(imagePoint.x,imagePoint.y,1));
+	tmp*=(imagePoint.z+m2.at<double>(2))/tmp.at<double>(2);
+	tmp-=m2;
+	return cv::Point2f(tmp.at<double>(0),tmp.at<double>(1));
 }
 }
 

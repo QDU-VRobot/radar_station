@@ -10,6 +10,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <tuple>
 #include <utility>
 #include <algorithm>
 #include "opencv2/calib3d.hpp"
@@ -24,10 +25,11 @@
 #include "STrack.h"
 extern size_t threads;
 extern std::chrono::milliseconds wait_timeout;
+static bool running=true;
 static void handle_exit(int type)
 {
-	std::cerr<<"Received "<<type<<", exiting"<<std::endl;
-	mode=0;
+	std::cerr<<"Received signal "<<type<<", exiting"<<std::endl;
+	running=false;
 }
 static deploy::DetectRes car_infer(const cv::Mat& img, deploy::DetectModel* car_model)
 {
@@ -128,7 +130,7 @@ static std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,flo
 	std::cerr<<"Threads (Using/Pool/Max): "<<thread_pool.size()<<'/'<<car_model_pool.size()<<'/'<<threads<<std::endl;
 	return std::make_pair(tracked,track_id);
 }
-static char output(cv::Mat& img,const std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,float>>>& result, const cv::Mat& trans_matrix, cv::VideoWriter& rec, serial::terminal& sport, cv::Mat&& example_img, float scale, unsigned short latency=0)
+static char output(cv::Mat& img,const std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,float>>>& result, const cv::Mat& m1, const cv::Mat& m2, const std::vector<std::pair<std::vector<cv::Point2f>,float>>& contours, cv::VideoWriter& rec, serial::terminal& sport, cv::Mat&& example_img, float scale, unsigned short latency=0)
 {
 	static bool serial_busy=false; //Prevent infinite thread creation
 	std::vector<cv::Point2f> center_points; //Mark to the minimap and send to server
@@ -137,8 +139,20 @@ static char output(cv::Mat& img,const std::pair<const vector<STrack>, const std:
 		std::vector<uint8_t> ids;
 		for(auto it=result.first.begin();it!=result.first.end();++it)
 		{
-			center_points.emplace_back(it->tlwh[0]+it->tlwh[2]/2,it->tlwh[1]+it->tlwh[3]/2);
-			std::cout<<it->track_id<<':'<<center_points.back()<<';';
+			cv::Point2f pos2d(it->tlwh[0]+it->tlwh[2]/2,it->tlwh[1]+it->tlwh[3]-it->tlwh[2]/2);
+			float height=0;
+			if(!m1.empty()&&!m2.empty())
+			{
+				for(auto i=contours.begin();i!=contours.end();++i)
+					if(cv::pointPolygonTest(i->first,pos2d,false)>0)
+					{
+						height=i->second;
+						break;
+					}
+				pos2d=backProjectPoint(cv::Point3d(pos2d.x,pos2d.y,height),m1,m2);
+			}
+			center_points.push_back(pos2d);
+			std::cout<<it->track_id<<':'<<'['<<pos2d.x<<','<<pos2d.y<<','<<height<<']'<<';';
 			if(result.second.count(it->track_id))
 			{
 				std::cout<<static_cast<unsigned>(result.second.at(it->track_id).first)<<','<<result.second.at(it->track_id).second;
@@ -148,27 +162,28 @@ static char output(cv::Mat& img,const std::pair<const vector<STrack>, const std:
 				ids.push_back(-1);
 			std::cout<<std::endl;
 		}
-		if(!trans_matrix.empty())
-			cv::perspectiveTransform(center_points,center_points,trans_matrix);
 		if((mode&11)==11&&!serial_busy&&serial_info.robot_id)
-			std::thread(send_pos,&sport,center_points,ids,&serial_busy).detach(); //Use a new thread for a blocking task
+			serial_busy=true,std::thread(send_pos,&sport,center_points,ids,&serial_busy).detach(); //Use a new thread for a blocking task
 	}
 	if(!img.empty()&&((mode&4)==4||(mode&48)&&rec.isOpened()))
 	{
 		if((mode&16)==16&&rec.isOpened())
 			rec.write(img);
 		cv::putText(img,std::string("Latency: ")+std::to_string(latency)+"ms",cv::Point(img.cols-255,30),0,1,cv::Scalar(0,255,0),2);
-		cv::putText(img,std::string("State: ")+std::to_string(serial_info.game_progress),cv::Point(5,30),0,1,cv::Scalar(0,255,0),2);
-		cv::putText(img,std::string("Timer: ")+std::to_string(serial_info.stage_remain_time/60)+':'+std::to_string(serial_info.stage_remain_time%60),cv::Point(150,30),0,1,cv::Scalar(0,255,0),2);
-		if(serial_info.robot_id)
-			cv::putText(img,std::string("Team: ")+(serial_info.robot_id/100?"Blue":"Red"),cv::Point(350,30),0,1,cv::Scalar(0,255,0),2);
+		if((mode&8)==8)
 		{
-			std::string marked("Marked: ");
-			for(uint8_t i=1<<5;i>0;i>>=1)
-				marked+=serial_info.mark_progress&i?'1':'0';
-			cv::putText(img,marked,cv::Point(5,img.rows-10),0,1,cv::Scalar(0,255,0),2);
+			cv::putText(img,std::string("State: ")+std::to_string(serial_info.game_progress),cv::Point(5,30),0,1,cv::Scalar(0,255,0),2);
+			cv::putText(img,std::string("Timer: ")+std::to_string(serial_info.stage_remain_time/60)+':'+std::to_string(serial_info.stage_remain_time%60),cv::Point(150,30),0,1,cv::Scalar(0,255,0),2);
+			if(serial_info.robot_id)
+				cv::putText(img,std::string("Team: ")+(serial_info.robot_id/100?"Blue":"Red"),cv::Point(350,30),0,1,cv::Scalar(0,255,0),2);
+			{
+				std::string marked("Marked: ");
+				for(uint8_t i=1<<5;i>0;i>>=1)
+					marked+=serial_info.mark_progress&i?'1':'0';
+				cv::putText(img,marked,cv::Point(5,img.rows-10),0,1,cv::Scalar(0,255,0),2);
+			}
+			cv::putText(img,std::string("Damages: ")+std::to_string(serial_info.more_damage)+(serial_info.damaging?'*':' '),cv::Point(img.cols-210,img.rows-10),0,1,cv::Scalar(0,255,0),2);
 		}
-		cv::putText(img,std::string("Damages: ")+std::to_string(serial_info.more_damage)+(serial_info.damaging?'*':' '),cv::Point(img.cols-210,img.rows-10),0,1,cv::Scalar(0,255,0),2);
 		for(auto it=result.first.begin();it!=result.first.end();++it)
 		{
 			cv::rectangle(img,cv::Rect(it->tlwh[0],it->tlwh[1],it->tlwh[2],it->tlwh[3]),cv::Scalar(0,255,0),2);
@@ -183,7 +198,7 @@ static char output(cv::Mat& img,const std::pair<const vector<STrack>, const std:
 			if(!example_img.empty())
 			{
 				for(auto it=center_points.begin();it!=center_points.end();++it)
-					cv::circle(example_img,trans_matrix.empty()?cv::Point2f(it->x*example_img.cols/img.cols,it->y*example_img.rows/img.rows):*it*scale,2,cv::Scalar(0,255,0),cv::LineTypes::FILLED);
+					cv::circle(example_img,m1.empty()||m2.empty()?cv::Point(it->x*example_img.cols/img.cols,it->y*example_img.rows/img.rows):cv::Point(it->x*scale,example_img.rows-it->y*scale),2,cv::Scalar(0,255,0),cv::LineTypes::FILLED);
 				cv::imshow("Minimap",example_img);
 			}
 			cv::imshow("Radar",img);
@@ -192,7 +207,7 @@ static char output(cv::Mat& img,const std::pair<const vector<STrack>, const std:
 	}
 	return -1;
 }
-int run(const char* car_engine, const char* armor_engine, const std::pair<const std::pair<int,int>,float>& image_arg, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec, serial::terminal& sport, bool wait_forever, const cv::Mat& trans_matrix, const cv::Mat& cam_matrix, const cv::Mat& dist_coeffs, const cv::Mat& example_img, float scale)
+int run(const char* car_engine, const char* armor_engine, const std::tuple<int,int,float>& image_arg, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec, serial::terminal& sport, bool wait_forever, const std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>,float>>>& pose_points, const cv::Mat& cam_matrix, const cv::Mat& dist_coeffs, const cv::Mat& example_img, float scale)
 {
 	unsigned short err_counter=0;
 	deploy::DetectModel *car_model=0,*armor_model=0;
@@ -203,9 +218,9 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 		deploy::InferOption car_option;
 		if(cap.isOpened())
 			car_option.enableSwapRB();
-		car_option.setInputDimensions(image_arg.first.first,image_arg.first.second);
+		car_option.setInputDimensions(std::get<0>(image_arg),std::get<1>(image_arg));
 		car_model=new deploy::DetectModel(car_engine,car_option);
-		tracker=new BYTETracker(image_arg.second,image_arg.second);
+		tracker=new BYTETracker(std::get<2>(image_arg),std::get<2>(image_arg));
 		if((mode&3)==3)
 		{
 			std::cout<<"Loading armor engine..."<<std::endl;
@@ -215,11 +230,19 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 			armor_model=new deploy::DetectModel(armor_engine,armor_option);
 		}
 	}
-	cv::Mat img,map;
+	cv::Mat img,map,m1,m2;
 	if(!cam_matrix.empty())
 	{
 		cv::Mat tmp;
-		cv::initUndistortRectifyMap(cam_matrix,dist_coeffs,cv::Mat(),cv::Mat(),cv::Size(image_arg.first.first,image_arg.first.second),CV_32FC2,map,tmp);
+		cv::initUndistortRectifyMap(cam_matrix,dist_coeffs,cv::Mat(),cv::Mat(),cv::Size(std::get<0>(image_arg),std::get<1>(image_arg)),CV_32FC2,map,tmp);
+	}
+	if(!std::get<0>(pose_points).empty())
+	{
+		cv::Mat rinv,cam_matrix_inv;
+		cv::Rodrigues(std::get<0>(pose_points),rinv);
+		cv::invert(rinv,rinv);
+		cv::invert(cam_matrix.empty()?calculateCameraMatrix(cv::Size(std::get<0>(image_arg),std::get<1>(image_arg)),acos(0.5)):cam_matrix,cam_matrix_inv);
+		m1=rinv*cam_matrix_inv,m2=rinv*std::get<1>(pose_points);
 	}
 	std::pair<vector<STrack>, std::map<int, std::pair<uint8_t,float>>> result;
 	std::cout<<"Video starting"<<std::endl;
@@ -227,7 +250,7 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 		std::cerr<<"Signal registration failed"<<std::endl;
 	if(cap.isOpened())
 	{
-		while(cap.read(img)&&!img.empty()&&mode)
+		while(cap.read(img)&&!img.empty()&&running)
 		{
 			static std::chrono::steady_clock::time_point old_timestamp=std::chrono::steady_clock::now();
 			std::chrono::steady_clock::time_point now=std::chrono::steady_clock::now();
@@ -240,8 +263,8 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 			if((mode&1)==1)
 				result=threaded_infer(img,car_model,armor_model,tracker,wait_forever);
 			std::cerr<<"Cycle: "<<std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count()<<"ms"<<std::endl;
-			if(output(img,result,trans_matrix,rec,sport,example_img.clone(),scale,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count())==27)
-				mode=0;
+			if(output(img,result,m1,m2,std::get<2>(pose_points),rec,sport,example_img.clone(),scale,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count())==27)
+				running=false;
 			old_timestamp=now;
 		}
 		std::cout<<"Video stopped"<<std::endl;
@@ -256,7 +279,7 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 			return 2;
 		}
 		hikcamera::FRAME frame;
-		while(err_counter<wait_timeout.count()*5000&&mode)
+		while(err_counter<wait_timeout.count()*5000&&running)
 		{
 			err_counter=hikcam.grab_frame(&frame,wait_timeout.count())==hikcamera::OK?0:err_counter+1;
 			static int64_t old_timestamp=frame.stFrameInfo.nHostTimeStamp;
@@ -277,8 +300,8 @@ int run(const char* car_engine, const char* armor_engine, const std::pair<const 
 				std::cerr<<"Interval: "<<frame.stFrameInfo.nHostTimeStamp-old_timestamp<<"ms"<<std::endl;
 				cv::cvtColor(img,img,cv::COLOR_RGB2BGR);
 			}
-			if(output(img,result,trans_matrix,rec,sport,example_img.clone(),scale,frame.stFrameInfo.nHostTimeStamp-old_timestamp)==27)
-				mode=0;
+			if(output(img,result,m1,m2,std::get<2>(pose_points),rec,sport,example_img.clone(),scale,frame.stFrameInfo.nHostTimeStamp-old_timestamp)==27)
+				running=false;
 			if(!err_counter)
 			{
 				old_timestamp=frame.stFrameInfo.nHostTimeStamp;
