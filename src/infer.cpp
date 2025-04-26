@@ -30,6 +30,7 @@ static void handle_exit(int type)
 {
 	std::cerr<<"Received signal "<<type<<", exiting"<<std::endl;
 	running=false;
+	signal(type,SIG_DFL);
 }
 static deploy::DetectRes car_infer(const cv::Mat& img, deploy::DetectModel* car_model)
 {
@@ -246,7 +247,7 @@ int run(const char* car_engine, const char* armor_engine, const std::tuple<int,i
 	}
 	std::pair<vector<STrack>, std::map<int, std::pair<uint8_t,float>>> result;
 	std::cout<<"Video starting"<<std::endl;
-	if(signal(SIGINT,handle_exit)==SIG_ERR)
+	if(signal(SIGINT,handle_exit)==SIG_ERR||signal(SIGHUP,handle_exit)==SIG_ERR||signal(SIGTERM,handle_exit)==SIG_ERR)
 		std::cerr<<"Signal registration failed"<<std::endl;
 	if(cap.isOpened())
 	{
