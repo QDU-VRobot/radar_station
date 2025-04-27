@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.6...3.18)
 
-project(serial CXX)
+project(serial C CXX)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
@@ -10,6 +10,9 @@ if(NOT CMAKE_LIBRARY_OUTPUT_DIRECTORY)
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 endif()
 option(BUILD_SHARED_LIBS "build shared libraries" ON)
+
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_EXTENSIONS OFF)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_EXTENSIONS OFF)
