@@ -13,7 +13,7 @@ option(BUILD_SHARED_LIBS "build shared libraries" ON)
 
 find_package(Eigen3 REQUIRED)
 
-set(CMAKE_CXX_STANDARD 98)
+set(CMAKE_CXX_STANDARD 17) #C++17 must be used to avoid segmentation fault
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src ${PROJECT_NAME}_SOURCE)
@@ -26,5 +26,5 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_options(${PROJECT_NAME} PRIVATE -fstack-protector-strong -fstack-clash-protection)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(${PROJECT_NAME} PRIVATE -D_GLIBCXX_ASSERTIONS -D_FORTIFY_SOURCE=1)
-    target_compile_options(${PROJECT_NAME} PRIVATE $<$<NOT:$<COMPILE_LANGUAGE:CUDA>>:-Og> -fanalyzer -ftrivial-auto-var-init=pattern -Wextra -Wpedantic)
+    target_compile_options(${PROJECT_NAME} PRIVATE -Og -fanalyzer -ftrivial-auto-var-init=pattern -Wextra -Wpedantic)
 endif()
