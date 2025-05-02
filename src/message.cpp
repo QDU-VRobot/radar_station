@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <string>
 #include <chrono>
+#include <thread>
 #define MAX_BUF 256
 //See RoboMaster file
 #pragma pack(1)
@@ -119,103 +120,126 @@ volatile struct serial_info serial_info;
 static volatile cv::Point2f pos_from_sentry[6];
 static volatile uint8_t count_remaining[6]={0}; //cache for a while
 extern std::vector<std::vector<uint8_t>> robot_classes;//HERO=0,ENGINEER,INFANTRY3,INFANTRY4,INFANTRY5,SENTRY
-void receive(serial::terminal* sport,const std::string& filename)
+void receive(serial::terminal* sport)
 {
 	union frame buf;
 	int state;
-	while(sport->get_fd()>=0||(state=!open_serial(*sport,filename.c_str())))
+	while((mode&8)==8)
 	{
-		state=sport->read(&buf.header,1);
-		if(state<0)
-			break;
-		if(buf.header.SOF!=0xA5)
+		while(sport->get_fd()>=0)
 		{
-			fprintf(stderr,"Invalid header: %#0hhX\n",buf.header.SOF);
-			continue;
+			state=sport->read(&buf.header,1);
+			if(state<0)
+				break;
+			if(buf.header.SOF!=0xA5)
+			{
+				#ifndef NDEBUG
+				fprintf(stderr,"Skipping non-header data: %02hhx\n",buf.header.SOF);
+				#endif
+				continue;
+			}
+			state=sport->read_wCRC8(&buf.header,sizeof(buf.header),1);
+			if(state!=0&&state<static_cast<int>(sizeof(buf.header)-1))
+				break;
+			if(buf.header.data_length>MAX_BUF-(sizeof(buf.header)+sizeof(buf.cmd_id)+sizeof(frame_tail)))
+				buf.header.data_length=0;
+			if(state||!buf.header.data_length)
+			{
+				sport->read(&buf.data,sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail));
+				continue;
+			}
+			#ifndef NDEBUG
+			fprintf(stderr,"Received header: ");
+			for(size_t i=0;i<sizeof(buf.header);++i)
+				fprintf(stderr,"%02hhx ",buf.data[i]);
+			fprintf(stderr,"\n");
+			#endif
+			state=sport->read_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail),sizeof(buf.header));
+			if(state!=0&&state<static_cast<int>(sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
+				break;
+			if(state)
+				continue;
+			switch(buf.cmd_id)
+			{
+				case 0x0001:
+					if(buf.game_status.game_progress!=serial_info.game_progress)
+						printf("Game state changed to: %hhu\n",buf.game_status.game_progress);
+					printf("Timer: %hu:%hu\n",buf.game_status.stage_remain_time/60,buf.game_status.stage_remain_time%60);
+					serial_info.game_progress=buf.game_status.game_progress,serial_info.stage_remain_time=buf.game_status.stage_remain_time;
+					break;
+				case 0x0002:
+					switch(buf.winner)
+					{
+						case 0:
+							printf("Result: Draw!\n");
+							break;
+						case 1:
+							printf("Result: Red wins!\n");
+							break;
+						case 2:
+							printf("Result: Blue wins!\n");
+							break;
+					}
+					break;
+				case 0x0104:
+					printf("Robot %hhu is %s %hhu time(s)!\n",buf.referee_warning.offending_robot_id,buf.referee_warning.level>=3?"punished":"warned",buf.referee_warning.count);
+					break;
+				case 0x0201:
+					printf("Robot ID: %hhu (%s)\n",buf.robot_status.robot_id,buf.robot_status.robot_id>=100?"Blue":"Red");
+					serial_info.robot_id=buf.robot_status.robot_id;
+					break;
+				case 0x020C:
+					printf("Marked: ");
+					for(uint8_t i=1<<4;i>0;i>>=1)
+						printf("%c",serial_info.mark_progress&i?'1':'0');
+					printf("\n");
+					serial_info.mark_progress=buf.mark_progress;
+					break;
+				case 0x020E:
+					printf("Double damages: %hhu%c\n",buf.radar_info&3,buf.radar_info&4?'*':' ');
+					serial_info.more_damage=buf.radar_info&3,serial_info.damaging=buf.radar_info&4;
+					break;
+				case 0x0301:
+					printf("Received data from another robot:\ncmd_id: %#06hx sender_id: %#06hx ",buf.rheader.data_cmd_id,buf.rheader.sender_id);
+					#ifndef NDEBUG
+					printf("data: ");
+					for(size_t i=sizeof(buf.header)+sizeof(buf.cmd_id)+sizeof(buf.rheader);i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length;++i)
+						printf("%02hhx ",buf.data[i]);
+					#endif
+					printf("\n");
+					switch(buf.rheader.data_cmd_id)
+					{
+						case 0x0279:
+							for(size_t i=0;i<6;++i)
+								if(buf.robot_pos.data[i*2]>0&&buf.robot_pos.data[i*2+1]>0)
+								{
+									count_remaining[i]=0; //Make sure the pos being modified is not used
+									printf("Robot position updated (%zu)\n",i);
+									pos_from_sentry[i].x=buf.robot_pos.data[i*2],pos_from_sentry[i].y=buf.robot_pos.data[i*2+1];
+									count_remaining[i]=5;
+								}
+							break;
+					}
+					break;
+				#ifndef NDEBUG
+					default:
+						fprintf(stderr,"Received an unhandled packet, cmd_id: %#06hx\n",buf.cmd_id);
+						break;
+				#endif
+			}
 		}
-		state=sport->read_wCRC8(&buf.header,sizeof(buf.header),1);
-		if(state!=0&&state<static_cast<int>(sizeof(buf.header)-1))
-			break;
-		if(state==sizeof(buf.header)-1)
+		if(sport->get_fd()>=0)
 		{
-			sport->read(&buf.data,sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail));
-			continue;
+			perror("Fatal error detected, re-enabling serial port");
+			while(!open_serial(*sport))
+				std::this_thread::sleep_for(std::chrono::seconds(1));
 		}
-		state=sport->read_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail),sizeof(buf.header));
-		if(state!=0&&state<static_cast<int>(sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
-			break;
-		if(state==sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))
-			continue;
-		switch(buf.cmd_id)
-		{
-			case 0x0001:
-				if(buf.game_status.game_progress!=serial_info.game_progress)
-					printf("Game state changed to: %hhu\n",buf.game_status.game_progress);
-				printf("Timer: %hu:%hu\n",buf.game_status.stage_remain_time/60,buf.game_status.stage_remain_time%60);
-				serial_info.game_progress=buf.game_status.game_progress,serial_info.stage_remain_time=buf.game_status.stage_remain_time;
-				break;
-			case 0x0002:
-				switch(buf.winner)
-				{
-					case 0:
-						printf("Result: Draw!\n");
-						break;
-					case 1:
-						printf("Result: Red wins!\n");
-						break;
-					case 2:
-						printf("Result: Blue wins!\n");
-						break;
-				}
-				break;
-			case 0x0104:
-				printf("Warning: Robot %hhu is %s %hhu time(s)!\n",buf.referee_warning.offending_robot_id,buf.referee_warning.level>=3?"punished ":"warned ",buf.referee_warning.count);
-				break;
-			case 0x0201:
-				printf("Robot ID: %hhu (%s)\n",buf.robot_status.robot_id,buf.robot_status.robot_id>=100?"Blue":"Red");
-				serial_info.robot_id=buf.robot_status.robot_id;
-				break;
-			case 0x020C:
-				printf("Marked: ");
-				for(uint8_t i=1<<4;i>0;i>>=1)
-					printf("%c",serial_info.mark_progress&i?'1':'0');
-				serial_info.mark_progress=buf.mark_progress;
-				break;
-			case 0x020E:
-				printf("Double damages: %hhu%c\n",buf.radar_info&3,buf.radar_info&4?'*':' ');
-				serial_info.more_damage=buf.radar_info&3,serial_info.damaging=buf.radar_info&4;
-				break;
-			case 0x0301:
-				printf("Received data from another robot:\ncmd_id: %#0hx sender_id: %#0hx\ndata: ",buf.rheader.data_cmd_id,buf.rheader.sender_id);
-				for(size_t i=sizeof(buf.header)+sizeof(buf.cmd_id)+sizeof(buf.rheader);i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length;++i)
-					printf("%0hhX ",buf.data[i]);
-				printf("\n");
-				switch(buf.rheader.data_cmd_id)
-				{
-					case 0x0279:
-						for(size_t i=0;i<6;++i)
-							if(buf.robot_pos.data[i*2]>0&&buf.robot_pos.data[i*2+1]>0)
-							{
-								count_remaining[i]=0; //Make sure the pos being modified is not used
-								printf("Robot position updated (%zu)\n",i);
-								pos_from_sentry[i].x=buf.robot_pos.data[i*2],pos_from_sentry[i].y=buf.robot_pos.data[i*2+1];
-								count_remaining[i]=5;
-							}
-						break;
-				}
-				break;
-		}
-	}
-	if(state!=0)
-	{
-		perror("Fatal error detected, disabling serial port");
-		sport->~terminal();
-		mode&=~8;
 	}
 }
 uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids, bool* lock)
 {
-	union frame buf={{{0x5A,sizeof(union map_robot),0},0x0305,{.map_robot={.data={0}}}}};
+	static uint8_t seq=0;
+	union frame buf={{{0x5A,sizeof(union map_robot),seq++},0x0305,{.map_robot={.data={0}}}}};
 	uint8_t team=serial_info.robot_id/100,ret=0;
 	union robot_pos pos={.data={0}};
 	size_t count=0;
@@ -242,7 +266,14 @@ uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_
 					*lock=false;
 				return ret;
 			}
+			#ifndef NDEBUG
+			fprintf(stderr,"Sent data to server: ");
+			for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
+				fprintf(stderr,"%02hhx ",buf.data[i]);
+			fprintf(stderr,"\n");
+			#endif
 			ret|=1;
+			buf.header.seq=seq++;
 			buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.robot_pos);
 			buf.cmd_id=0x0301;
 			buf.rheader.data_cmd_id=0x0297,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=team*100+7;
@@ -254,10 +285,17 @@ uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_
 					*lock=false;
 				return ret;
 			}
+			#ifndef NDEBUG
+			fprintf(stderr,"Sent data to robot: ");
+			for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
+				fprintf(stderr,"%02hhx ",buf.data[i]);
+			fprintf(stderr,"\n");
+			#endif
 			ret|=4;
 		}
 		if(count>=3&&!serial_info.damaging&&damaged<serial_info.more_damage)
 		{
+			buf.header.seq=seq++;
 			buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.radar_cmd);
 			buf.cmd_id=0x0301;
 			buf.rheader.data_cmd_id=0x0121,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=0x8080;
@@ -269,6 +307,12 @@ uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_
 					*lock=false;
 				return ret;
 			}
+			#ifndef NDEBUG
+			fprintf(stderr,"Applying more damages: ");
+			for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
+				fprintf(stderr,"%02hhx ",buf.data[i]);
+			fprintf(stderr,"\n");
+			#endif
 			ret|=2;
 		}
 	}

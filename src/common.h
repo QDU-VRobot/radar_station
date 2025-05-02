@@ -23,7 +23,7 @@ extern volatile struct serial_info
 	uint8_t damaging:1;
 } serial_info;
 int run(const char* car_engine, const char* armor_engine, const std::tuple<int,int,float>& image_arg, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec, serial::terminal& sport, bool wait_forever=false, const std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>,float>>>& pose_points=std::make_tuple(cv::Mat(),cv::Mat(),std::vector<std::pair<std::vector<cv::Point2f>,float>>()), const cv::Mat& cam_matrix=cv::Mat(), const cv::Mat& dist_coeffs=cv::Mat(), const cv::Mat& example_img=cv::Mat(), float scale=1);
-void receive(serial::terminal* sport,const std::string& filename);
+void receive(serial::terminal* sport);
 uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids,bool* lock=0);
 inline bool file_readable(const char* filename)
 {
@@ -47,9 +47,14 @@ inline size_t getsavename(char* savename, const char* pathname, const char* save
 	strcpy(savename+savelen-extlen,saveext);
 	return 0;
 }
-inline bool open_serial(serial::terminal& port, const char* filename)
+inline bool open_serial(serial::terminal& port, const char* filename=0)
 {
-	if(port.open(filename)<0)
+	if(filename)
+	{
+		if(port.open(filename)<0)
+			return false;
+	}
+	else if(port.open()<0)
 		return false;
 	port.set_rate(SERIAL_SPEED);
 	port.options.c_cflag&=~(CSIZE|CSTOPB|PARENB);

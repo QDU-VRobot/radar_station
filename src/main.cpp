@@ -424,7 +424,7 @@ int main(int argc, char** argv)
 	//Part 3.2 Set serial config
 	if((mode&8)==8)
 		if(open_serial(sport,args.get<std::string>("s").c_str()))
-			std::thread(receive,&sport,args.get<std::string>("s")).detach();
+			std::thread(receive,&sport).detach();
 		else
 		{
 			std::cerr<<"Serial port is not available"<<std::endl;

@@ -4,6 +4,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <map>
+#include <string>
 namespace serial
 {
 	#if __cplusplus >= 201103L
@@ -15,7 +16,7 @@ namespace serial
 		if(ofd>=0&&tcgetattr(ofd,&options)!=0)
 			perror(errors[0]);
 	}
-	terminal::terminal(const char* filename,int oflag)
+	terminal::terminal(const std::string& filename,int oflag)
 	{
 		fd=-1;
 		open(filename,oflag);
@@ -26,11 +27,13 @@ namespace serial
 		fd=term.fd,flag=term.flag,options=term.options;
 		return *this;
 	}
-	int terminal::open(const char* filename,int oflag)
+	int terminal::open(const std::string& filename,int oflag)
 	{
 		terminal::~terminal();
+		if(filename.size())
+			file=filename;
 		flag=oflag;
-		if((fd=::open(filename,oflag))>=0)
+		if((fd=::open(file.c_str(),oflag))>=0)
 		{
 			if(tcgetattr(fd,&options)!=0)
 				perror(errors[0]);
@@ -108,6 +111,6 @@ namespace serial
 	terminal::~terminal()
 	{
 		if(fd>=0)
-			close(fd);
+			close(fd),fd=-1;
 	}
 }

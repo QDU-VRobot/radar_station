@@ -4,16 +4,18 @@
 #include <termios.h>
 #include <fcntl.h>
 #include <map>
+#include <string>
 namespace serial
 {
 	class terminal
 	{
 		int fd;
 		int flag;
+		std::string file;
 	public:
 		struct termios options;
 		terminal(int ofd=-1,int oflag=O_RDWR|O_NOCTTY);
-		terminal(const char* filename,int oflag=O_RDWR|O_NOCTTY);
+		terminal(const std::string& filename,int oflag=O_RDWR|O_NOCTTY);
 		terminal& operator=(const terminal& term);
 		#if __cplusplus >= 201103L
 		terminal& operator=(terminal&& term)=default;
@@ -23,7 +25,7 @@ namespace serial
 		{
 			return fd;
 		}
-		int open(const char* filename,int oflag=O_RDWR|O_NOCTTY);
+		int open(const std::string& filename=std::string(),int oflag=O_RDWR|O_NOCTTY);
 		int set_rate(speed_t speed);
 		int write(const void* data,size_t count);
 		int read(void* data,size_t count);
