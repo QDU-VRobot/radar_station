@@ -120,15 +120,15 @@ volatile struct serial_info serial_info;
 static volatile cv::Point2f pos_from_sentry[6];
 static volatile uint8_t count_remaining[6]={0}; //cache for a while
 extern std::vector<std::vector<uint8_t>> robot_classes;//HERO=0,ENGINEER,INFANTRY3,INFANTRY4,INFANTRY5,SENTRY
-void receive(serial::terminal* sport)
+void receive(serial::terminal& sport)
 {
 	union frame buf;
 	int state;
 	while((mode&8)==8)
 	{
-		while(sport->get_fd()>=0)
+		while(sport.get_fd()>=0)
 		{
-			state=sport->read(&buf.header,1);
+			state=sport.read(&buf.header,1);
 			if(state<0)
 				break;
 			if(buf.header.SOF!=0xA5)
@@ -138,14 +138,14 @@ void receive(serial::terminal* sport)
 				#endif
 				continue;
 			}
-			state=sport->read_wCRC8(&buf.header,sizeof(buf.header),1);
+			state=sport.read_wCRC8(&buf.header,sizeof(buf.header),1);
 			if(state!=0&&state<static_cast<int>(sizeof(buf.header)-1))
 				break;
 			if(buf.header.data_length>MAX_BUF-(sizeof(buf.header)+sizeof(buf.cmd_id)+sizeof(frame_tail)))
 				buf.header.data_length=0;
 			if(state||!buf.header.data_length)
 			{
-				sport->read(&buf.data,sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail));
+				sport.read(&buf.data,sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail));
 				continue;
 			}
 			#ifndef NDEBUG
@@ -154,7 +154,7 @@ void receive(serial::terminal* sport)
 				fprintf(stderr,"%02hhx ",buf.data[i]);
 			fprintf(stderr,"\n");
 			#endif
-			state=sport->read_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail),sizeof(buf.header));
+			state=sport.read_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail),sizeof(buf.header));
 			if(state!=0&&state<static_cast<int>(sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
 				break;
 			if(state)
@@ -228,15 +228,15 @@ void receive(serial::terminal* sport)
 				#endif
 			}
 		}
-		if(sport->get_fd()>=0)
+		if(sport.get_fd()>=0)
 		{
 			perror("Fatal error detected, re-enabling serial port");
-			while(!open_serial(*sport))
+			while(!open_serial(sport))
 				std::this_thread::sleep_for(std::chrono::seconds(1));
 		}
 	}
 }
-uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids, bool* lock)
+uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids, bool* lock)
 {
 	static uint8_t seq=0;
 	union frame buf={{{0x5A,sizeof(union map_robot),seq++},0x0305,{.map_robot={.data={0}}}}};
@@ -260,18 +260,18 @@ uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_
 			for(size_t i=0;i<sizeof(union robot_pos)/sizeof(float);++i)
 				buf.map_robot.data[i]=pos.data[i]*100;
 			Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
-			if(sport->write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
+			if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
 			{
 				if(lock)
 					*lock=false;
 				return ret;
 			}
+			fprintf(stderr,"Sent data to server ");
 			#ifndef NDEBUG
-			fprintf(stderr,"Sent data to server: ");
 			for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
 				fprintf(stderr,"%02hhx ",buf.data[i]);
-			fprintf(stderr,"\n");
 			#endif
+			fprintf(stderr,"\n");
 			ret|=1;
 			buf.header.seq=seq++;
 			buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.robot_pos);
@@ -279,18 +279,18 @@ uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_
 			buf.rheader.data_cmd_id=0x0297,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=team*100+7;
 			buf.robot_pos=pos;
 			Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
-			if(sport->write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
+			if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
 			{
 				if(lock)
 					*lock=false;
 				return ret;
 			}
+			fprintf(stderr,"Sent data to robot ");
 			#ifndef NDEBUG
-			fprintf(stderr,"Sent data to robot: ");
 			for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
 				fprintf(stderr,"%02hhx ",buf.data[i]);
-			fprintf(stderr,"\n");
 			#endif
+			fprintf(stderr,"\n");
 			ret|=4;
 		}
 		if(count>=3&&!serial_info.damaging&&damaged<serial_info.more_damage)
@@ -301,18 +301,18 @@ uint8_t send_pos(serial::terminal* sport,const std::vector<cv::Point2f>& center_
 			buf.rheader.data_cmd_id=0x0121,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=0x8080;
 			buf.radar_cmd=++damaged;
 			Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
-			if(sport->write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
+			if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
 			{
 				if(lock)
 					*lock=false;
 				return ret;
 			}
+			fprintf(stderr,"Applying more damages ");
 			#ifndef NDEBUG
-			fprintf(stderr,"Applying more damages: ");
 			for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
 				fprintf(stderr,"%02hhx ",buf.data[i]);
-			fprintf(stderr,"\n");
 			#endif
+			fprintf(stderr,"\n");
 			ret|=2;
 		}
 	}

@@ -47,6 +47,7 @@ static inline int init_hikcamera(hikcamera::camera& hikcam, uint8_t device_num)
 uint8_t mode; //Bit 0: Use car model; Bit 1: Use armor model (car model must be used); Bit 2: Display video; Bit 3: Enable serial port; All 0: Generate only
 size_t threads; //For car_infer
 std::chrono::milliseconds wait_timeout; //Timeout for inferring to finish per cycle
+serial::terminal sport;
 std::vector<std::vector<uint8_t>> robot_classes{{1,2,3,4,5,7},{101,102,103,104,105,107}}; //Default is their IDs, configurable
 static int convert(const struct model_config& config, size_t threads, const char** car_engine_name=0, const char** armor_engine_name=0)
 {
@@ -419,12 +420,10 @@ int main(int argc, char** argv)
 		std::cout<<" Video device: "<<static_cast<unsigned>(video_config.video_device);
 	std::cout<<" FPS: "<<video_config.fps<<" Exposure time: "<<video_config.exposure_time<<" Gain: "<<video_config.gain<<std::endl;
 	std::cout<<"Camera matrix:\n"<<cam_matrix<<"\nDistortion coefficients:\n"<<dist_coeffs<<std::endl;
-	//Part 3.1 Open serial port
-	serial::terminal sport;
-	//Part 3.2 Set serial config
+	//Part 3 Open serial port
 	if((mode&8)==8)
 		if(open_serial(sport,args.get<std::string>("s").c_str()))
-			std::thread(receive,&sport).detach();
+			std::thread(receive,std::ref(sport)).detach();
 		else
 		{
 			std::cerr<<"Serial port is not available"<<std::endl;

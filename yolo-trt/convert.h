@@ -39,7 +39,7 @@ inline bool convert_onnx(const char* filename, const char* savename, uint32_t fl
 	config->setFlags(flag),builder->setMaxThreads(threads);
 	if(imgwidth>0&&imgheight>0&&batchsize>0)
 	{
-		fprintf(stderr,"Creating optimization profile for dynamic tensors: Dims4{%ld, 3, %ld, %ld})\n",batchsize,imgwidth,imgheight);
+		fprintf(stderr,"Creating optimization profile for dynamic tensors: Dims4{%ld, 3, %ld, %ld}\n",batchsize,imgwidth,imgheight);
 		IOptimizationProfile* profile=builder->createOptimizationProfile();
 		profile->setDimensions(inputname, OptProfileSelector::kMIN, Dims4(1, 3, imgwidth, imgheight));
 		profile->setDimensions(inputname, OptProfileSelector::kOPT, Dims4(batchsize, 3, imgwidth, imgheight));

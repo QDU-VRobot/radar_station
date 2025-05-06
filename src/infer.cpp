@@ -164,7 +164,7 @@ static char output(cv::Mat& img,const std::pair<const vector<STrack>, const std:
 			std::cout<<std::endl;
 		}
 		if((mode&11)==11&&!serial_busy&&serial_info.robot_id)
-			serial_busy=true,std::thread(send_pos,&sport,center_points,ids,&serial_busy).detach(); //Use a new thread for a blocking task
+			serial_busy=true,std::thread(send_pos,std::ref(sport),center_points,ids,&serial_busy).detach(); //Use a new thread for a blocking task
 	}
 	if(!img.empty()&&((mode&4)==4||(mode&48)&&rec.isOpened()))
 	{

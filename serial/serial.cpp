@@ -24,7 +24,7 @@ namespace serial
 	terminal& terminal::operator=(const terminal& term)
 	{
 		terminal::~terminal();
-		fd=term.fd,flag=term.flag,options=term.options;
+		fd=term.fd,flag=term.flag,options=term.options,file=term.file;
 		return *this;
 	}
 	int terminal::open(const std::string& filename,int oflag)
@@ -111,6 +111,9 @@ namespace serial
 	terminal::~terminal()
 	{
 		if(fd>=0)
-			close(fd),fd=-1;
+		{
+			int tmp=fd;
+			fd=-1,close(tmp);
+		}
 	}
 }
