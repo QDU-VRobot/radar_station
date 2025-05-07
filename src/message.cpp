@@ -239,7 +239,7 @@ void receive(serial::terminal& sport)
 uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids, bool* lock)
 {
 	static uint8_t seq=0;
-	union frame buf={{{0x5A,sizeof(union map_robot),seq++},0x0305,{.map_robot={.data={0}}}}};
+	union frame buf={{{0xA5,sizeof(union map_robot),seq++},0x0305,{.map_robot={.data={0}}}}};
 	uint8_t team=serial_info.robot_id/100,ret=0;
 	union robot_pos pos={.data={0}};
 	size_t count=0;
