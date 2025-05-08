@@ -16,8 +16,10 @@ namespace serial
 		struct termios options;
 		terminal(int ofd=-1,int oflag=O_RDWR|O_NOCTTY);
 		terminal(const std::string& filename,int oflag=O_RDWR|O_NOCTTY);
+		terminal(const terminal& term);
 		terminal& operator=(const terminal& term);
 		#if __cplusplus >= 201103L
+		terminal(terminal&& term)=default;
 		terminal& operator=(terminal&& term)=default;
 		static const std::map<unsigned,speed_t> speed;
 		#endif

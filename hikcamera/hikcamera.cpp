@@ -3,23 +3,14 @@
 namespace hikcamera
 {
 	int camera::last_error=0;
-	camera::camera(const CAMERA_INFO* pstDevInfo)
+	camera::camera(const CAMERA_INFO* pstDevInfo):handle(0),is_opened(false)
 	{
-		handle=0,is_opened=false;
 		if(pstDevInfo)
 			camera::open(pstDevInfo);
 	}
-	camera::camera(const camera& cam)
+	camera::camera(const camera& cam):handle(0),is_opened(false)
 	{
-		if(cam.is_opened)
-			throw std::runtime_error("Camera must be closed before copying");
-		handle=0,is_opened=false;
-		if(cam.handle)
-		{
-			CAMERA_INFO info;
-			if(MV_CC_GetDeviceInfo(cam.handle,&info)==MV_OK)
-				camera::open(&info);
-		}
+		*this=cam;
 	}
 	camera& camera::operator=(const camera& cam)
 	{

@@ -16,15 +16,21 @@ namespace serial
 		if(ofd>=0&&tcgetattr(ofd,&options)!=0)
 			perror(errors[0]);
 	}
-	terminal::terminal(const std::string& filename,int oflag)
+	terminal::terminal(const std::string& filename,int oflag):fd(-1)
 	{
-		fd=-1;
 		open(filename,oflag);
+	}
+	terminal::terminal(const terminal& term):fd(-1)
+	{
+		*this=term;
 	}
 	terminal& terminal::operator=(const terminal& term)
 	{
 		terminal::~terminal();
-		fd=term.fd,flag=term.flag,options=term.options,file=term.file;
+		if(term.fd>=0)
+			open(term.file,term.flag);
+		else
+			flag=term.flag,options=term.options,file=term.file;
 		return *this;
 	}
 	int terminal::open(const std::string& filename,int oflag)
@@ -62,9 +68,12 @@ namespace serial
 	{
 		size_t ncount=0;
 		for(int status;ncount<count;ncount+=status)
-			if((status=::read(fd,data,count))<0)
+			if((status=::read(fd,data,count))<=0)
 			{
-				perror(errors[4]);
+				if(status<0)
+					perror(errors[4]);
+				else
+					fputs(errors[4],stderr),fputs("\n",stderr);
 				return ncount?ncount:-1;
 			}
 		return ncount;
@@ -113,7 +122,7 @@ namespace serial
 		if(fd>=0)
 		{
 			int tmp=fd;
-			fd=-1,close(tmp);
+			fd=-1,::close(tmp);
 		}
 	}
 }

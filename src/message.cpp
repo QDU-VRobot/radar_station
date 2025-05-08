@@ -230,7 +230,7 @@ void receive(serial::terminal& sport)
 		}
 		if(sport.get_fd()>=0)
 		{
-			perror("Fatal error detected, re-enabling serial port");
+			fprintf(stderr,"Fatal error detected, re-enabling serial port\n");
 			while(!open_serial(sport))
 				std::this_thread::sleep_for(std::chrono::seconds(1));
 		}
