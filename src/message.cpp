@@ -158,7 +158,12 @@ void receive(serial::terminal& sport)
 			if(state!=0&&state<static_cast<int>(sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
 				break;
 			if(state)
+			{
+				#ifndef NDEBUG
+				fprintf(stderr,"Received a wrong packet, cmd_id: 0x%04hx\n",buf.cmd_id);
+				#endif
 				continue;
+			}
 			switch(buf.cmd_id)
 			{
 				case 0x0001:
@@ -200,7 +205,7 @@ void receive(serial::terminal& sport)
 					serial_info.more_damage=buf.radar_info&3,serial_info.damaging=buf.radar_info&4;
 					break;
 				case 0x0301:
-					printf("Received data from another robot:\ncmd_id: %#06hx sender_id: %#06hx ",buf.rheader.data_cmd_id,buf.rheader.sender_id);
+					printf("Received data from another robot:\ncmd_id: 0x%04hx sender_id: 0x%04hx ",buf.rheader.data_cmd_id,buf.rheader.sender_id);
 					#ifndef NDEBUG
 					printf("data: ");
 					for(size_t i=sizeof(buf.header)+sizeof(buf.cmd_id)+sizeof(buf.rheader);i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length;++i)
@@ -223,7 +228,7 @@ void receive(serial::terminal& sport)
 					break;
 				#ifndef NDEBUG
 					default:
-						fprintf(stderr,"Received an unhandled packet, cmd_id: %#06hx\n",buf.cmd_id);
+						fprintf(stderr,"Received an unhandled packet, cmd_id: 0x%04hx\n",buf.cmd_id);
 						break;
 				#endif
 			}
