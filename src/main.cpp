@@ -48,7 +48,7 @@ uint8_t mode; //Bit 0: Use car model; Bit 1: Use armor model (car model must be 
 size_t threads; //For car_infer
 std::chrono::milliseconds wait_timeout; //Timeout for inferring to finish per cycle
 serial::terminal sport;
-std::vector<std::vector<uint8_t>> robot_classes{{1,2,3,4,5,7},{101,102,103,104,105,107}}; //Default is their IDs, configurable
+std::vector<std::vector<uint8_t>> robot_classes{{0,1,2,3,4,5},{6,7,8,9,10,11}}; //Configurable
 static int convert(const struct model_config& config, size_t threads, const char** car_engine_name=0, const char** armor_engine_name=0)
 {
 	char* car_engine=new char[getsavename(0,config.car_file.c_str(),config.save_ext)+1];

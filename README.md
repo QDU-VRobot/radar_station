@@ -5,19 +5,16 @@ Designed for and tested on Linux
 State: 2.5D (with fixed height) implemented
 
 Usage:
-1. Install compilers and dependencies (CUDA, TensorRT and MVS, plus **git** for cloning and **cmake** for building)
-2. Clone this repository
+1. Install compilers and dependencies below (plus **git** and **git-lfs** for cloning and **cmake** for building)
+2. Clone this repository (make sure models are cloned too)
 3. Run `cmake -B build` to generate a *build* folder
 4. Run `cmake --build build/ -j` to compile
 5. Check executables and libraries in *build* folder
-6. Use the calibration executable to generate camera config, and then add
-   ```yaml
-   robot_classes:
-      - [ 0, 1, 2, 3, 4, 5 ]
-      - [ 6, 7, 8, 9, 10, 11 ]
-   ```
-   into the config file
-7. Follow other help instructions by using `--help` flag
+6. Use the calibration executable to generate camera config
+7. Add more parameters by checking help output
+8. Set up camera and serial port
+9. Mark points on first startup
+10. Check result
 
 Libraries used in this repository:
 * [OpenCV](https://opencv.org/releases)

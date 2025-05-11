@@ -12,7 +12,6 @@ class STrack
 {
 public:
 	STrack(vector<float> tlwh_, float score);
-	~STrack();
 
 	vector<float> static tlbr_to_tlwh(vector<float> &tlbr);
 	void static multi_predict(vector<STrack*> &stracks, byte_kalman::KalmanFilter &kalman_filter);

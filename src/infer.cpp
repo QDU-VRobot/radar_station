@@ -105,7 +105,7 @@ static std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,flo
 			std::vector<int> ids;
 			for(auto i=tracked.begin();i!=tracked.end();++i)
 			{
-				float left=MAX(i->tlwh[0],0),top=MAX(i->tlwh[1],0),width=MIN(i->tlwh[2]-(left-i->tlwh[0]),old_img.cols-left),height=MIN(i->tlwh[3]-(top-i->tlwh[1]),old_img.rows-top);
+				float left=MAX(i->tlbr[0],0),top=MAX(i->tlbr[1],0),width=MIN(i->tlbr[2],old_img.cols)-left,height=MIN(i->tlbr[3],old_img.rows)-top;
 				armors.push_back(old_img(cv::Rect2f(left,top,width,height)).clone()); //Do not overflow
 				ids.push_back(i->track_id);
 			}
@@ -140,7 +140,7 @@ static char output(cv::Mat& img,const std::pair<const vector<STrack>, const std:
 		std::vector<uint8_t> ids;
 		for(auto it=result.first.begin();it!=result.first.end();++it)
 		{
-			cv::Point2f pos2d(it->tlwh[0]+it->tlwh[2]/2,it->tlwh[1]+it->tlwh[3]-it->tlwh[2]/2);
+			cv::Point2f pos2d(it->tlbr[0]+it->tlwh[2]/2,it->tlbr[3]-it->tlwh[2]/2);
 			float height=0;
 			if(!m1.empty()&&!m2.empty())
 			{
@@ -188,9 +188,9 @@ static char output(cv::Mat& img,const std::pair<const vector<STrack>, const std:
 		for(auto it=result.first.begin();it!=result.first.end();++it)
 		{
 			cv::rectangle(img,cv::Rect(it->tlwh[0],it->tlwh[1],it->tlwh[2],it->tlwh[3]),cv::Scalar(0,255,0),2);
-			cv::putText(img,std::to_string(it->track_id)+':'+std::to_string(it->score),cv::Point(it->tlwh[0],it->tlwh[1]),1,1,cv::Scalar(0,255,0),1);
+			cv::putText(img,std::to_string(it->track_id)+':'+std::to_string(it->score),cv::Point(it->tlbr[0],it->tlbr[1]),1,1,cv::Scalar(0,255,0),1);
 			if((mode&3)==3&&result.second.count(it->track_id))
-				cv::putText(img,std::to_string(result.second.at(it->track_id).first)+':'+std::to_string(result.second.at(it->track_id).second),cv::Point(it->tlwh[0],it->tlwh[1]+it->tlwh[3]),1,1,cv::Scalar(0,255,0),1);
+				cv::putText(img,std::to_string(result.second.at(it->track_id).first)+':'+std::to_string(result.second.at(it->track_id).second),cv::Point(it->tlbr[0],it->tlbr[3]),1,1,cv::Scalar(0,255,0),1);
 		}
 		if((mode&32)==32&&rec.isOpened())
 			rec.write(img);

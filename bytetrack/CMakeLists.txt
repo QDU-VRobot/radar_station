@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.6...3.18)
 
-project(bytetrack CXX)
+project(bytetrack C CXX)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
@@ -12,6 +12,9 @@ endif()
 option(BUILD_SHARED_LIBS "build shared libraries" ON)
 
 find_package(Eigen3 REQUIRED)
+
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_EXTENSIONS OFF)
 
 set(CMAKE_CXX_STANDARD 17) #C++17 must be used to avoid segmentation fault
 set(CMAKE_CXX_EXTENSIONS OFF)

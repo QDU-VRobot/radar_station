@@ -8,12 +8,8 @@ BYTETracker::BYTETracker(int frame_rate, int track_buffer)
 	match_thresh = 0.8;
 
 	frame_id = 0;
-	max_time_lost = int(frame_rate / 30.0 * track_buffer);
+	max_time_lost = frame_rate * track_buffer / 30;
 	cout << "Init ByteTrack!" << endl;
-}
-
-BYTETracker::~BYTETracker()
-{
 }
 
 vector<STrack> BYTETracker::update(const vector<Object>& objects)

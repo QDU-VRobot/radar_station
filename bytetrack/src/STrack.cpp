@@ -20,10 +20,6 @@ STrack::STrack(vector<float> tlwh_, float score)
 	start_frame = 0;
 }
 
-STrack::~STrack()
-{
-}
-
 void STrack::activate(byte_kalman::KalmanFilter &kalman_filter, int frame_id)
 {
 	this->kalman_filter = kalman_filter;

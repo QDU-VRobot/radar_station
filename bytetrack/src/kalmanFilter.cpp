@@ -131,8 +131,7 @@ namespace byte_kalman
 	{
 		KAL_HDATA pa = this->project(mean, covariance);
 		if (only_position) {
-			printf("not implement!");
-			exit(0);
+			fputs("Not implemented!\n",stderr);
 		}
 		KAL_HMEAN mean1 = pa.first;
 		KAL_HCOVA covariance1 = pa.second;

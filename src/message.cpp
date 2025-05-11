@@ -263,7 +263,7 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 		{
 			last_time=time;
 			for(size_t i=0;i<sizeof(union robot_pos)/sizeof(float);++i)
-				buf.map_robot.data[i]=pos.data[i]*100;
+				buf.map_robot.data[i]=MAX(pos.data[i],0)*100;
 			Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
 			if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
 			{
@@ -298,13 +298,15 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 			fprintf(stderr,"\n");
 			ret|=4;
 		}
-		if(count>=3&&!serial_info.damaging&&damaged<serial_info.more_damage)
+		if(count>=3&&!serial_info.damaging)
 		{
 			buf.header.seq=seq++;
 			buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.radar_cmd);
 			buf.cmd_id=0x0301;
 			buf.rheader.data_cmd_id=0x0121,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=0x8080;
-			buf.radar_cmd=++damaged;
+			if(damaged<serial_info.more_damage)
+				++damaged;
+			buf.radar_cmd=damaged;
 			Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
 			if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
 			{

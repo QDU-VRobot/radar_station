@@ -6,7 +6,7 @@
 
 /** Column-reduction and reduction transfer for a dense cost matrix.
  */
-int_t _ccrrt_dense(const uint_t n, cost_t *cost[],
+static int_t _ccrrt_dense(const uint_t n, cost_t *cost[],
 	int_t *free_rows, int_t *x, int_t *y, cost_t *v)
 {
 	int_t n_free_rows;
@@ -73,7 +73,7 @@ int_t _ccrrt_dense(const uint_t n, cost_t *cost[],
 
 /** Augmenting row reduction for a dense cost matrix.
  */
-int_t _carr_dense(
+static int_t _carr_dense(
 	const uint_t n, cost_t *cost[],
 	const uint_t n_free_rows,
 	int_t *free_rows, int_t *x, int_t *y, cost_t *v)
@@ -150,7 +150,7 @@ int_t _carr_dense(
 
 /** Find columns with minimum d[j] and put them on the SCAN list.
  */
-uint_t _find_dense(const uint_t n, uint_t lo, cost_t *d, int_t *cols, int_t *y)
+static uint_t _find_dense(const uint_t n, uint_t lo, cost_t *d, int_t *cols, int_t *y)
 {
 	uint_t hi = lo + 1;
 	cost_t mind = d[cols[lo]];
@@ -171,7 +171,7 @@ uint_t _find_dense(const uint_t n, uint_t lo, cost_t *d, int_t *cols, int_t *y)
 
 // Scan all columns in TODO starting from arbitrary column in SCAN
 // and try to decrease d of the TODO columns using the SCAN column.
-int_t _scan_dense(const uint_t n, cost_t *cost[],
+static int_t _scan_dense(const uint_t n, cost_t *cost[],
 	uint_t *plo, uint_t*phi,
 	cost_t *d, int_t *cols, int_t *pred,
 	int_t *y, cost_t *v)
@@ -215,7 +215,7 @@ int_t _scan_dense(const uint_t n, cost_t *cost[],
  *
  * \return The closest free column index.
  */
-int_t find_path_dense(
+static int_t find_path_dense(
 	const uint_t n, cost_t *cost[],
 	const int_t start_i,
 	int_t *y, cost_t *v,
@@ -280,7 +280,7 @@ int_t find_path_dense(
 
 /** Augment for a dense cost matrix.
  */
-int_t _ca_dense(
+static int_t _ca_dense(
 	const uint_t n, cost_t *cost[],
 	const uint_t n_free_rows,
 	int_t *free_rows, int_t *x, int_t *y, cost_t *v)
