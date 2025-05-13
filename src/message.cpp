@@ -221,7 +221,7 @@ void receive(serial::terminal& sport)
 									count_remaining[i]=0; //Make sure the pos being modified is not used
 									printf("Robot position updated (%zu)\n",i);
 									pos_from_sentry[i].x=buf.robot_pos.data[i*2],pos_from_sentry[i].y=buf.robot_pos.data[i*2+1];
-									count_remaining[i]=5;
+									count_remaining[i]=25;
 								}
 							break;
 					}
@@ -256,10 +256,15 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 			pos.data[i*2]=pos_from_sentry[i].x,pos.data[i*2+1]=pos_from_sentry[i].y,++count;
 	for(size_t i=0,id;i<ids.size();++i)
 		if(ids[i]!=-1&&(id=std::find(robot_classes[team].begin(),robot_classes[team].end(),ids[i])-robot_classes[team].begin())<6&&!count_remaining[id])
+		{
 			pos.data[id*2]=center_points[i].x,pos.data[id*2+1]=center_points[i].y,++count; //Convert unit (m->cm)
+			#ifndef NDEBUG
+			fprintf(stderr,"Robot %zu: (%.2f,%.2f)\n",id,center_points[i].x,center_points[i].y);
+			#endif
+		}
 	if(count>0)
 	{
-		if(std::chrono::duration_cast<std::chrono::milliseconds>(time-last_time).count()>=25)
+		if(std::chrono::duration_cast<std::chrono::milliseconds>(time-last_time).count()>=40)
 		{
 			last_time=time;
 			for(size_t i=0;i<sizeof(union robot_pos)/sizeof(float);++i)
@@ -297,30 +302,30 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 			#endif
 			fprintf(stderr,"\n");
 			ret|=4;
-		}
-		if(count>=3&&!serial_info.damaging)
-		{
-			buf.header.seq=seq++;
-			buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.radar_cmd);
-			buf.cmd_id=0x0301;
-			buf.rheader.data_cmd_id=0x0121,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=0x8080;
-			if(damaged<serial_info.more_damage)
-				++damaged;
-			buf.radar_cmd=damaged;
-			Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
-			if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
+			if(count>=3&&!serial_info.damaging)
 			{
-				if(lock)
-					*lock=false;
-				return ret;
+				buf.header.seq=seq++;
+				buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.radar_cmd);
+				buf.cmd_id=0x0301;
+				buf.rheader.data_cmd_id=0x0121,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=0x8080;
+				if(damaged<serial_info.more_damage)
+					++damaged;
+				buf.radar_cmd=damaged;
+				Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
+				if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
+				{
+					if(lock)
+						*lock=false;
+					return ret;
+				}
+				fprintf(stderr,"Applying more damages ");
+				#ifndef NDEBUG
+				for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
+					fprintf(stderr,"%02hhx ",buf.data[i]);
+				#endif
+				fprintf(stderr,"\n");
+				ret|=2;
 			}
-			fprintf(stderr,"Applying more damages ");
-			#ifndef NDEBUG
-			for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
-				fprintf(stderr,"%02hhx ",buf.data[i]);
-			#endif
-			fprintf(stderr,"\n");
-			ret|=2;
 		}
 	}
 	if(lock)

@@ -383,7 +383,8 @@ int main(int argc, char** argv)
 			config["camera_matrix"]>>cam_matrix,config["distortion_coefficients"]>>dist_coeffs;
 			config["rvec"]>>std::get<0>(pose_points),config["tvec"]>>std::get<1>(pose_points);
 			config["contours"]>>points,config["contour_heights"]>>heights;
-			config["robot_classes"]>>robot_classes;
+			if(!config["robot_classes"].empty())
+				config["robot_classes"]>>robot_classes;
 			heights.resize(points.size());
 			for(size_t i=0;i<points.size();++i)
 				std::get<2>(pose_points).emplace_back(std::move(points[i]),heights[i]);
