@@ -259,7 +259,7 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 			pos.data[id*2]=center_points[i].x,pos.data[id*2+1]=center_points[i].y,++count; //Convert unit (m->cm)
 	if(count>0)
 	{
-		if(std::chrono::duration_cast<std::chrono::milliseconds>(time-last_time).count()>=100)
+		if(std::chrono::duration_cast<std::chrono::milliseconds>(time-last_time).count()>=25)
 		{
 			last_time=time;
 			for(size_t i=0;i<sizeof(union robot_pos)/sizeof(float);++i)
