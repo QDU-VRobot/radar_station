@@ -36,7 +36,7 @@ static deploy::DetectRes car_infer(const cv::Mat& img, deploy::DetectModel* car_
 {
 	return car_model->predict(deploy::Image(img.data,img.cols,img.rows));
 }
-static std::map<int, std::pair<uint8_t,float>> armor_infer(const std::vector<cv::Mat>& armors, std::vector<int>& ids, deploy::DetectModel* armor_model)
+static std::map<int, std::pair<uint8_t,float>> armor_infer(const std::vector<cv::Mat>& armors, std::vector<int>& ids, deploy::DetectModel* armor_model, float fps)
 {
 	static std::map<int,std::pair<uint8_t,float>> tracking;
 	std::vector<deploy::Image> imgs;
@@ -62,6 +62,13 @@ static std::map<int, std::pair<uint8_t,float>> armor_infer(const std::vector<cv:
 				deduplicated[result[i].classes[j]]=std::make_pair(i,result[i].scores[j]);
 				break;
 			}
+	for(auto i=tracking.begin();i!=tracking.end();++i)
+		if(std::find(ids.begin(),ids.end(),i->first)==ids.end())
+		{
+			i->second.first-=2/fps;
+			if(i->second.first<=0)
+				i=tracking.erase(i);
+		}
 	for(auto it=deduplicated.begin();it!=deduplicated.end();++it)
 	{
 		bool exist=false;
@@ -70,7 +77,7 @@ static std::map<int, std::pair<uint8_t,float>> armor_infer(const std::vector<cv:
 			{
 				if(ids[it->second.first]!=i->first)
 				{
-					if(it->second.second>i->second.second||std::find(ids.begin(),ids.end(),i->first)==ids.end())
+					if(it->second.second>i->second.second)
 						i=tracking.erase(i);
 					else
 						exist=true;
@@ -82,7 +89,7 @@ static std::map<int, std::pair<uint8_t,float>> armor_infer(const std::vector<cv:
 	}
 	return tracking;
 }
-static std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,float>>> threaded_infer(const cv::Mat& img, const deploy::DetectModel* car_model, deploy::DetectModel* armor_model=0, BYTETracker* tracker=0, bool wait_forever=false)
+static std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,float>>> threaded_infer(const cv::Mat& img, const deploy::DetectModel* car_model, deploy::DetectModel* armor_model=0, BYTETracker* tracker=0, bool wait_forever=false, std::chrono::milliseconds delay=std::chrono::milliseconds(0))
 {
 	static std::deque<std::future<deploy::DetectRes>> thread_pool;
 	static std::vector<std::unique_ptr<deploy::DetectModel>> car_model_pool;
@@ -109,7 +116,7 @@ static std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,flo
 				armors.push_back(old_img(cv::Rect2f(left,top,width,height)).clone()); //Do not overflow
 				ids.push_back(i->track_id);
 			}
-			track_id=armor_infer(armors,ids,armor_model);
+			track_id=armor_infer(armors,ids,armor_model,1000.0/delay.count());
 		}
 	}
 	if(!img.empty())
@@ -262,7 +269,7 @@ int run(const char* car_engine, const char* armor_engine, const std::tuple<int,i
 				img=std::move(tmp);
 			}
 			if((mode&1)==1)
-				result=threaded_infer(img,car_model,armor_model,tracker,wait_forever);
+				result=threaded_infer(img,car_model,armor_model,tracker,wait_forever,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp));
 			std::cerr<<"Cycle: "<<std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count()<<"ms"<<std::endl;
 			if(output(img,result,m1,m2,std::get<2>(pose_points),rec,sport,example_img.clone(),scale,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count())==27)
 				running=false;
@@ -295,7 +302,7 @@ int run(const char* car_engine, const char* armor_engine, const std::tuple<int,i
 					img=std::move(tmp);
 			}
 			if((mode&1)==1)
-				result=threaded_infer(img,car_model,armor_model,tracker,wait_forever);
+				result=threaded_infer(img,car_model,armor_model,tracker,wait_forever,std::chrono::milliseconds(frame.stFrameInfo.nHostTimeStamp-old_timestamp));
 			if(!err_counter)
 			{
 				std::cerr<<"Interval: "<<frame.stFrameInfo.nHostTimeStamp-old_timestamp<<"ms"<<std::endl;
