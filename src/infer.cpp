@@ -62,29 +62,36 @@ static std::map<int, std::pair<uint8_t,float>> armor_infer(const std::vector<cv:
 				deduplicated[result[i].classes[j]]=std::make_pair(i,result[i].scores[j]);
 				break;
 			}
-	for(auto i=tracking.begin();i!=tracking.end();++i)
+	auto i=tracking.begin();
+	while(i!=tracking.end())
+	{
 		if(std::find(ids.begin(),ids.end(),i->first)==ids.end())
 		{
-			i->second.first-=2/fps;
-			if(i->second.first<=0)
+			i->second.second-=1/fps;
+			if(i->second.second<=0)
+			{
 				i=tracking.erase(i);
+				continue;
+			}
 		}
+		++i;
+	}
 	for(auto it=deduplicated.begin();it!=deduplicated.end();++it)
 	{
 		bool exist=false;
 		for(auto i=tracking.begin();i!=tracking.end();++i)
 			if(it->first==i->second.first)
 			{
-				if(ids[it->second.first]!=i->first)
+				if(it->second.second>i->second.second)
 				{
-					if(it->second.second>i->second.second)
-						i=tracking.erase(i);
-					else
-						exist=true;
+					if(ids[it->second.first]!=i->first)
+						tracking.erase(i);
 				}
+				else
+					exist=true;
 				break;
 			}
-		if(!exist)
+		if(!exist&&!(tracking.count(ids[it->second.first])&&tracking[ids[it->second.first]].second>=it->second.second))
 			tracking[ids[it->second.first]]=std::make_pair(it->first,it->second.second);
 	}
 	return tracking;
