@@ -270,23 +270,25 @@ int run(const char* car_engine, const char* armor_engine, const std::tuple<int,i
 		std::cerr<<"Signal registration failed"<<std::endl;
 	if(cap.isOpened())
 	{
-		while(!(err_counter=!cap.read(img))&&running)
-		{
-			static std::chrono::steady_clock::time_point old_timestamp=std::chrono::steady_clock::now();
-			std::chrono::steady_clock::time_point now=std::chrono::steady_clock::now();
-			if(!cam_matrix.empty())
+		do
+			while(!(err_counter=!cap.read(img))&&running)
 			{
-				cv::Mat tmp;
-				cv::remap(img,tmp,map,cv::Mat(),INTER_LINEAR); //Cannot undistort in-place
-				img=std::move(tmp);
+				static std::chrono::steady_clock::time_point old_timestamp=std::chrono::steady_clock::now();
+				std::chrono::steady_clock::time_point now=std::chrono::steady_clock::now();
+				if(!cam_matrix.empty())
+				{
+					cv::Mat tmp;
+					cv::remap(img,tmp,map,cv::Mat(),INTER_LINEAR); //Cannot undistort in-place
+					img=std::move(tmp);
+				}
+				if((mode&1)==1)
+					result=threaded_infer(img,car_model,armor_model,tracker,wait_forever,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp));
+				std::cerr<<"Cycle: "<<std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count()<<"ms"<<std::endl;
+				if(output(img,result,m1,m2,std::get<2>(pose_points),rec,sport,example_img.clone(),scale,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count())==27)
+					running=false; //ESC to exit
+				old_timestamp=now;
 			}
-			if((mode&1)==1)
-				result=threaded_infer(img,car_model,armor_model,tracker,wait_forever,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp));
-			std::cerr<<"Cycle: "<<std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count()<<"ms"<<std::endl;
-			if(output(img,result,m1,m2,std::get<2>(pose_points),rec,sport,example_img.clone(),scale,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count())==27)
-				running=false; //ESC to exit
-			old_timestamp=now;
-		}
+		while(running&&(mode&64==64)&&cap.set(cv::CAP_PROP_POS_FRAMES,0));
 		std::cout<<"Video stopped"<<std::endl;
 	}
 	else if(hikcam.isopened())
