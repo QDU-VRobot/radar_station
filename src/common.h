@@ -13,11 +13,11 @@
 extern "C"
 {
 extern uint8_t mode;
-extern volatile struct serial_info
+extern volatile struct serial_info //See RoboMaster doc
 {
 	uint16_t stage_remain_time;
 	uint8_t robot_id;
-	uint8_t mark_progress:6;
+	uint8_t mark_progress:6; //Robot 123457
 	uint8_t game_progress:3;
 	uint8_t more_damage:2;
 	uint8_t damaging:1;
@@ -64,12 +64,12 @@ inline bool open_serial(serial::terminal& port, const char* filename=0)
 	port.options.c_lflag&=~(ICANON|ECHO|ISIG);
 	return port.apply_options()==0;
 }
-inline cv::Mat calculateCameraMatrix(cv::Size imgsize, double fov)
+inline cv::Mat calculateCameraMatrix(cv::Size imgsize, double fov) //Returns an ideal camera matrix with a given FOV
 {
 	double f=0.5/tan(fov/2);
 	return cv::Mat_<double>(3,3)<<imgsize.width*f,0,imgsize.width/2,0,imgsize.height*f,imgsize.height/2,0,0,1;
 }
-inline cv::Point2f backProjectPoint(cv::Point3d imagePoint, const cv::Mat& m1, const cv::Mat& m2)
+inline cv::Point2f backProjectPoint(cv::Point3d imagePoint, const cv::Mat& m1, const cv::Mat& m2) //imagePoint=video (x,y) and realistic z, m1=R^-1*K^-1, m2=R^-1*T
 {
 	cv::Mat tmp=m1*cv::Mat(cv::Point3d(imagePoint.x,imagePoint.y,1));
 	tmp*=(imagePoint.z+m2.at<double>(2))/tmp.at<double>(2);

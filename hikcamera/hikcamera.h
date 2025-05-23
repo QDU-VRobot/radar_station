@@ -13,6 +13,7 @@ namespace hikcamera
 		bool bValue;
 		MVCC_STRINGVALUE stStringValue;
 	};
+	//Unify different data types when getting/setting values
 	union settype
 	{
 		int64_t iValue;
@@ -21,6 +22,7 @@ namespace hikcamera
 		bool bValue;
 		const char* strValue;
 	};
+	//Alias of MV_*, providing convenience when changing camera type
 	typedef MV_CC_DEVICE_INFO_LIST CAMERA_INFO_LIST;
 	typedef MV_CC_DEVICE_INFO CAMERA_INFO;
 	typedef MV_FRAME_OUT_INFO_EX FRAME_INFO;

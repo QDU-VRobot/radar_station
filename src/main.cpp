@@ -13,7 +13,7 @@
 #include "opencv2/videoio.hpp"
 #include "opencv2/imgproc.hpp"
 #include "opencv2/imgcodecs.hpp"
-struct model_config
+struct model_config //Only used for onnx conversion
 {
 	uint32_t builder_flag; //See NvInfer.h
 	const std::string car_file; //ONNX/engine path
@@ -35,7 +35,7 @@ struct video_config
 	const std::string fourcc; //-1=interactive
 	int quality; //-1=keep original
 };
-static const char* name[2]={"Video","Field"};
+static const char* name[2]={"Video","Field"}; //Just for windows' name
 static inline int init_hikcamera(hikcamera::camera& hikcam, uint8_t device_num)
 {
 	hikcamera::CAMERA_INFO_LIST devlist=hikcamera::camera::enum_cameras(); //USB cameras must be enumerated before opening
@@ -44,11 +44,11 @@ static inline int init_hikcamera(hikcamera::camera& hikcam, uint8_t device_num)
 	std::cerr<<"Using camera "<<static_cast<unsigned>(device_num)<<std::endl;
 	return hikcam.open(devlist.pDeviceInfo[device_num]);
 }
-uint8_t mode; //Bit 0: Use car model; Bit 1: Use armor model (car model must be used); Bit 2: Display video; Bit 3: Enable serial port; All 0: Generate only
+uint8_t mode; //See help output
 size_t threads; //For car_infer
 std::chrono::milliseconds wait_timeout; //Timeout for inferring to finish per cycle
-serial::terminal sport;
-std::vector<std::vector<uint8_t>> robot_classes{{0,1,2,3,4,5},{6,7,8,9,10,11}}; //Configurable
+serial::terminal sport; //Communicate with judge
+std::vector<std::vector<uint8_t>> robot_classes{{0,1,2,3,4,5},{6,7,8,9,10,11}}; //{Blue{123457},Red{123457}}, Configurable
 static int convert(const struct model_config& config, size_t threads, const char** car_engine_name=0, const char** armor_engine_name=0)
 {
 	char* car_engine=new char[getsavename(0,config.car_file.c_str(),config.save_ext)+1];
@@ -175,14 +175,14 @@ static void adjust_height(int pos, void *userdata)
 }
 struct mark_flag
 {
-	uint8_t type:1;
-	uint8_t step:2; //0-finished; 1-mark points; 2-mark contour
+	uint8_t type:1; //0-video; 1-minimap
+	uint8_t step:2; //0-finished; 1-mark PnP points; 2-mark contour
 };
 static void mark(int event, int x, int y, int flags, void *userdata)
 {
-	static cv::Mat marked_img[2];
+	static cv::Mat marked_img[2]; //Video, Minimap
 	std::tuple<struct mark_flag&,const cv::Mat&,void*,const unsigned int&,void*>& arg=*(reinterpret_cast<std::tuple<struct mark_flag&,const cv::Mat&,void*,const unsigned int&,void*>*>(userdata));
-	if(marked_img[std::get<0>(arg).type].empty())
+	if(marked_img[std::get<0>(arg).type].empty()) //First call to this function
 		std::get<1>(arg).copyTo(marked_img[std::get<0>(arg).type]);
 	switch(event)
 	{
@@ -194,21 +194,21 @@ static void mark(int event, int x, int y, int flags, void *userdata)
 			cv::Point2f point(x,y);
 			switch(std::get<0>(arg).step)
 			{
-				case 1:
+				case 1: //Mark PnP point
 					if(std::get<0>(arg).type==0)
 						reinterpret_cast<std::vector<cv::Point2f>*>(std::get<2>(arg))->push_back(point);
 					else if(std::get<0>(arg).type==1)
 						reinterpret_cast<std::vector<cv::Point3f>*>(std::get<2>(arg))->emplace_back(x,y,std::get<3>(arg)*0.01);
 				cv::circle(marked_img[std::get<0>(arg).type],point,2,cv::Scalar(0,255,0),cv::LineTypes::FILLED);
 				break;
-				case 0:
+				case 0: //Start another contour marking
 					if(std::get<0>(arg).type==0)
 					{
 						std::vector<std::pair<std::vector<cv::Point2f>,float>>* contours=reinterpret_cast<std::vector<std::pair<std::vector<cv::Point2f>,float>>*>(std::get<4>(arg));
 						contours->resize(contours->size()+1);
 						std::get<0>(arg).step=2;
 					}
-				case 2:
+				case 2: //Add a contour point
 					if(std::get<0>(arg).type==0)
 					{
 						reinterpret_cast<std::vector<std::pair<std::vector<cv::Point2f>,float>>*>(std::get<4>(arg))->back().first.push_back(point);
@@ -219,17 +219,17 @@ static void mark(int event, int x, int y, int flags, void *userdata)
 		}
 			break;
 		case cv::EVENT_RBUTTONDOWN:
-			//Line & finish
+			//Finish
 			switch(std::get<0>(arg).step)
 			{
-				case 1:
+				case 1: //Finish PnP marking and go to contour marking
 					if(std::get<0>(arg).type==0)
 					{
 						std::vector<cv::Point2f>* points=reinterpret_cast<std::vector<cv::Point2f>*>(std::get<2>(arg));
 						if(points->size()>=4)
 						{
 							for(auto i=points->begin();i!=points->end();++i)
-								cv::line(marked_img[std::get<0>(arg).type],*i,i+1==points->end()?*points->begin():*(i+1),cv::Scalar(0,255,0),2);
+								cv::line(marked_img[std::get<0>(arg).type],*i,i+1==points->end()?*points->begin():*(i+1),cv::Scalar(0,255,0),2); //Line around points
 							std::cout<<"Marked "<<points->size()<<" points on "<<name[std::get<0>(arg).type]<<std::endl;
 							std::get<0>(arg).step=0;
 							std::cout<<"Now mark a contour for different heights"<<std::endl;
@@ -247,7 +247,7 @@ static void mark(int event, int x, int y, int flags, void *userdata)
 						}
 					}
 					break;
-				case 2:
+				case 2: //Finished a contour marking
 					if(std::get<0>(arg).type==0)
 					{
 						std::vector<std::pair<std::vector<cv::Point2f>,float>>* contours=reinterpret_cast<std::vector<std::pair<std::vector<cv::Point2f>,float>>*>(std::get<4>(arg));
@@ -264,7 +264,7 @@ static void mark(int event, int x, int y, int flags, void *userdata)
 			}
 			break;
 		case cv::EVENT_MBUTTONDOWN:
-			//Clear
+			//Clear and reset step to PnP marking
 			std::get<0>(arg).step=1;
 			if(std::get<0>(arg).type==0)
 				reinterpret_cast<std::vector<cv::Point2f>*>(std::get<2>(arg))->resize(0),reinterpret_cast<std::vector<std::pair<std::vector<cv::Point2f>,float>>*>(std::get<4>(arg))->resize(0);
@@ -281,8 +281,8 @@ static std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>
 {
 	std::vector<cv::Point2f> video_points;
 	std::vector<cv::Point3f> map_points;
-	std::vector<std::pair<std::vector<cv::Point2f>,float>> contours;
-	uint8_t key=0;
+	std::vector<std::pair<std::vector<cv::Point2f>,float>> contours; //Different height applied
+	uint8_t key=0; //Keyboard input
 	struct mark_flag state[2]={{0,1},{1,1}};
 	unsigned int z=0,contour_height=20;
 	cv::namedWindow(name[0]),cv::namedWindow(name[1]);
@@ -290,7 +290,7 @@ static std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>
 	cv::createTrackbar("Height of contour (cm)",name[0],reinterpret_cast<int*>(&contour_height),100,adjust_height,&contour_height);
 	cv::createTrackbar("Height of next point (cm)",name[1],reinterpret_cast<int*>(&z),100,adjust_height,&z);
 	cv::setMouseCallback(name[0],mark,&video_arg),cv::setMouseCallback(name[1],mark,&image_arg);
-	std::cout<<"Left click on the window anticlockwise to mark points; Right click to confirm; Middle click to reset\nPress 'c' for CLI input"<<std::endl;
+	std::cout<<"Left click on the window in certain sequence to mark points; Right click to confirm; Middle click to reset\nPress 'c' for CLI input"<<std::endl;
 	do
 	{
 		mark(-1,0,0,0,&video_arg),mark(-1,0,0,0,&image_arg); //Manually trigger mouse event to show image
@@ -299,9 +299,9 @@ static std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>
 	while((state[0].step!=0||state[1].step!=0||map_points.size()!=video_points.size())&&key!=27&&key!='c'&&key!='C');
 	cv::destroyAllWindows();
 	cv::Mat rvec,tvec;
-	if(key!=27) //ESC
+	if(key!=27) //ESC to discard markings
 	{
-		if(key=='c'||key=='C')
+		if(key=='c'||key=='C') //Enter CLI mode (without scale)
 		{
 			float x,y,z;
 			char c;

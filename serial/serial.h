@@ -7,6 +7,7 @@
 #include <string>
 namespace serial
 {
+	//Provide unified serial interface for different systems
 	class terminal
 	{
 		int fd;
