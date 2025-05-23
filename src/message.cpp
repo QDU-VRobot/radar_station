@@ -186,11 +186,15 @@ void receive(serial::terminal& sport)
 					if(buf.game_status.game_progress!=serial_info.game_progress)
 						printf("Game state changed to: %hhu\n",buf.game_status.game_progress);
 					printf("Timer: %hu:%hu\n",buf.game_status.stage_remain_time/60,buf.game_status.stage_remain_time%60);
-					if(buf.game_status.stage_remain_time<90&&damaged<1||buf.game_status.stage_remain_time<50&&damaged<2)
+					if(buf.game_status.game_progress==4)
 					{
-						++damaged;
-						printf("Double damage triggered due to timeout\n");
+						if(buf.game_status.stage_remain_time<90&&damaged<1||buf.game_status.stage_remain_time<50&&damaged<2)
+						{
+							++damaged;
+							printf("Double damage triggered due to timeout\n");
+						}
 					}
+					else damaged=0;
 					serial_info.game_progress=buf.game_status.game_progress,serial_info.stage_remain_time=buf.game_status.stage_remain_time;
 					break;
 				case 0x0002:
@@ -215,7 +219,7 @@ void receive(serial::terminal& sport)
 					for(size_t i=0;i<8;++i)
 						printf(" %hu",buf.game_robot_HP.blue_HP[i]);
 					printf("\n");
-					if((buf.game_robot_HP.red_HP[6]==0||buf.game_robot_HP.blue_HP[6]==0)&&damaged<1||(buf.game_robot_HP.red_HP[7]<=2500||buf.game_robot_HP.blue_HP[7]<=2500)&&damaged<2)
+					if(serial_info.game_progress==4&&((buf.game_robot_HP.red_HP[6]==0||buf.game_robot_HP.blue_HP[6]==0)&&damaged<1||(buf.game_robot_HP.red_HP[7]<=2500||buf.game_robot_HP.blue_HP[7]<=2500)&&damaged<2))
 					{
 						++damaged;
 						printf("Double damage triggered due to low HP\n");
@@ -230,7 +234,7 @@ void receive(serial::terminal& sport)
 					{
 						printf("Dart target switched\n");
 						pre_dart_target=buf.dart_info.dart_target;
-						if(damaged<serial_info.more_damage)
+						if(serial_info.game_progress==4&&damaged<serial_info.more_damage)
 						{
 							++damaged;
 							printf("Double damage triggered manually\n");
