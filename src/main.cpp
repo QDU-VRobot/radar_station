@@ -166,9 +166,9 @@ static std::tuple<int,int,float> apply_video_config(const struct video_config& c
 		if(config.quality>=0)
 			rec_config={cv::VIDEOWRITER_PROP_QUALITY,config.quality};
 		if(config.fourcc.size())
-			rec.open(config.record_file.c_str(),cv::VideoWriter::fourcc(config.fourcc[0],config.fourcc[1],config.fourcc[2],config.fourcc[3]),(mode&48)==48?fps*2:fps,cv::Size(width,height),rec_config);
+			rec.open(name.c_str(),cv::VideoWriter::fourcc(config.fourcc[0],config.fourcc[1],config.fourcc[2],config.fourcc[3]),(mode&48)==48?fps*2:fps,cv::Size(width,height),rec_config);
 		else
-			rec.open(config.record_file.c_str(),0,(mode&48)==48?fps*2:fps,cv::Size(width,height),rec_config); //Save pictures?
+			rec.open(name.c_str(),0,(mode&48)==48?fps*2:fps,cv::Size(width,height),rec_config); //Save pictures?
 	}
 	return std::make_tuple(width,height,fps);
 }
