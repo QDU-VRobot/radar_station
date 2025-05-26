@@ -288,7 +288,7 @@ int run(const char* car_engine, const char* armor_engine, const std::tuple<int,i
 					running=false; //ESC to exit
 				old_timestamp=now;
 			}
-		while(running&&(mode&64==64)&&cap.set(cv::CAP_PROP_POS_FRAMES,0));
+		while(running&&(mode&64)==64&&cap.set(cv::CAP_PROP_POS_FRAMES,0));
 		std::cout<<"Video stopped"<<std::endl;
 	}
 	else if(hikcam.isopened())
@@ -301,7 +301,7 @@ int run(const char* car_engine, const char* armor_engine, const std::tuple<int,i
 			return 2;
 		}
 		hikcamera::FRAME frame;
-		while(err_counter<wait_timeout.count()*5000&&running)
+		while(err_counter<MAX(2000/wait_timeout.count(),10000/std::get<2>(image_arg))&&running) //2s or 10 pictures
 		{
 			err_counter=hikcam.grab_frame(&frame,wait_timeout.count())==hikcamera::OK?0:err_counter+1;
 			static int64_t old_timestamp=frame.stFrameInfo.nHostTimeStamp;

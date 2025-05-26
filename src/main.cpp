@@ -159,13 +159,16 @@ static std::tuple<int,int,float> apply_video_config(const struct video_config& c
 	}
 	if(config.record_file.size())
 	{
+		std::string name=config.record_file;
+		if(config.record_file.back()=='/')
+			name+=std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+".mp4"; //Use system time if filename is unknown
 		std::vector<int> rec_config;
 		if(config.quality>=0)
 			rec_config={cv::VIDEOWRITER_PROP_QUALITY,config.quality};
-		if(config.fourcc[0]>0)
+		if(config.fourcc.size())
 			rec.open(config.record_file.c_str(),cv::VideoWriter::fourcc(config.fourcc[0],config.fourcc[1],config.fourcc[2],config.fourcc[3]),(mode&48)==48?fps*2:fps,cv::Size(width,height),rec_config);
 		else
-			rec.open(config.record_file.c_str(),config.fourcc[0],(mode&48)==48?fps*2:fps,cv::Size(width,height),rec_config); //Save pictures?
+			rec.open(config.record_file.c_str(),0,(mode&48)==48?fps*2:fps,cv::Size(width,height),rec_config); //Save pictures?
 	}
 	return std::make_tuple(width,height,fps);
 }
@@ -359,7 +362,7 @@ int main(int argc, char** argv)
 {
 	int ret;
 	//Part 1 Parse config
-	cv::CommandLineParser args(argc,argv,"{help ?||Show this help}{C|config.yml|Parameter file (*.XML, *.YAML or *.JSON)}{t|4|Threads}{m|63|Mode config (Bit 0: Use car model; Bit 1: Use armor model (car model must be used); Bit 2: Display video; Bit 3: Enable serial port; Bit 4: Record original video; Bit 5: Record processed video; Bit 6: Loop input video; All 0: Generate engine only)}{w|2|Wait timeout (ms) per cycle}{I|Field.jpg|Field image (black if not set)}{W|28|Field width}{H|15|Field height}{S|40|Field image scale}{s|/dev/ttyS0|Serial device}"
+	cv::CommandLineParser args(argc,argv,"{help ?||Show this help}{C|config.yml|Parameter file (*.XML, *.YAML or *.JSON)}{t|4|Threads}{m|31|Mode config (Bit 0: Use car model; Bit 1: Use armor model (car model must be used); Bit 2: Display video; Bit 3: Enable serial port; Bit 4: Record original video; Bit 5: Record processed video; Bit 6: Loop input video; All 0: Generate engine only)}{w|2|Wait timeout (ms) per cycle}{I|Field.jpg|Field image (black if not set)}{W|28|Field width}{H|15|Field height}{S|40|Field image scale}{s|/dev/ttyS0|Serial device}"
 	"{B|1033|Builder flags (See NvInfer.h for detail)}{c|models/car.onnx|Car model (ONNX format with plugins)}{a|models/armor.onnx|Armor model (ONNX format with plugins)}{n||No conversion, assume model files are already in TensorRT format}{tensor-width|640|Tensor width}{tensor-height|640|Tensor height}{b|6|Batch size (maximum is doubled)}"
 	"{V|2|Video type (0=Video file, 1=Generic camera (cv::VideoCapture), 2=hikcamera (MVS))}{f|-1|FPS (-1=auto, 0=keep unchanged)}{e|-1|Exposure time (-1=auto, 0=keep unchanged)}{g|-1|Gain (-1=auto)}{R||Record output file}{fourcc|avc1|Fourcc code}{q|-1|Quality of recorded video (-1=keep default)}{@file|0|Video device ID or video file}");
 	args.about("Detect cars and armors and (optionally) send their position to the serial port");
@@ -469,22 +472,33 @@ int main(int argc, char** argv)
 		if((std::get<0>(pose_points).empty()||std::get<1>(pose_points).empty())&&(mode&5)==5)
 		{
 			cv::Mat img;
-			if(cap.isOpened())
-				cap.read(img);
-			else if(hikcam.isopened())
+			if(hikcam.isopened()&&hikcam.start()!=hikcamera::OK)
 			{
-				hikcamera::FRAME frame;
-				if(hikcam.start()!=hikcamera::OK||hikcam.grab_frame(&frame,-1)!=hikcamera::OK)
-				{
-					std::cerr<<"An error occurred while starting video ["<<hikcamera::camera::last_error<<"]"<<std::endl;
-					return 2;
-				}
-				img=cv::Mat(frame.stFrameInfo.nHeight,frame.stFrameInfo.nWidth,CV_8UC1,frame.pBufAddr);
-				if(!img.empty())
-					cv::cvtColor(img,img,cv::COLOR_BayerBG2BGR);
-				hikcam.free_frame(&frame);
-				hikcam.stop();
+				std::cerr<<"An error occurred while starting video ["<<hikcamera::camera::last_error<<"]"<<std::endl;
+				return 2;
 			}
+			std::cout<<"Press any key to mark points"<<std::endl;
+			do //Find a best view to mark
+			{
+				if(cap.isOpened())
+					cap.read(img);
+				else if(hikcam.isopened())
+				{
+					hikcamera::FRAME frame;
+					if(hikcam.grab_frame(&frame,-1)!=hikcamera::OK)
+					{
+						std::cerr<<"An error occurred while capturing video ["<<hikcamera::camera::last_error<<"]"<<std::endl;
+						break;
+					}
+					img=cv::Mat(frame.stFrameInfo.nHeight,frame.stFrameInfo.nWidth,CV_8UC1,frame.pBufAddr);
+					if(!img.empty())
+						cv::cvtColor(img,img,cv::COLOR_BayerBG2BGR);
+					hikcam.free_frame(&frame);
+				}
+			}
+			while(!img.empty()&&(cv::imshow(name[0],img),cv::waitKey(wait_timeout.count()*100)==-1));
+			if(hikcam.isopened())
+				hikcam.stop();
 			if(!img.empty())
 			{
 				std::cerr<<"Marking field points"<<std::endl;
