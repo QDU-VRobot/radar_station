@@ -69,7 +69,7 @@ static std::map<int, std::pair<uint8_t,float>> armor_infer(const std::vector<cv:
 	{
 		if(std::find(ids.begin(),ids.end(),i->first)==ids.end())
 		{
-			i->second.second-=1/fps;
+			i->second.second=MIN(i->second.second-1.0/fps,1);
 			if(i->second.second<=0)
 			{
 				i=tracking.erase(i);
@@ -132,18 +132,18 @@ static std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,flo
 	if(!img.empty())
 	{
 		//Detect
+		old_img=img;
 		if(thread_pool.size()<threads)
 		{
 			if(thread_pool.size()==car_model_pool.size())
 				it=car_model_pool.insert(it,car_model->clone());
-			thread_pool.push_back(std::async(car_infer,img,it->get()));
+			thread_pool.push_back(std::async(car_infer,old_img,it->get()));
 			++it;
 			if(it==car_model_pool.end())
 				it=car_model_pool.begin();
 		}
 		else
 			std::cerr<<"Warning: Dropped a new frame due to full thread pool"<<std::endl;
-		old_img=img;
 	}
 	std::cerr<<"Threads (Using/Pool/Max): "<<thread_pool.size()<<'/'<<car_model_pool.size()<<'/'<<threads<<std::endl;
 	return std::make_pair(tracked,track_id);
@@ -244,8 +244,7 @@ int run(const char* car_engine, const char* armor_engine, const std::tuple<int,i
 		{
 			std::cout<<"Loading armor engine..."<<std::endl;
 			deploy::InferOption armor_option;
-			if(cap.isOpened())
-				armor_option.enableSwapRB();
+			armor_option.enableSwapRB();
 			armor_model=new deploy::DetectModel(armor_engine,armor_option);
 		}
 	}
