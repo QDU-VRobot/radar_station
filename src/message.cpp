@@ -247,7 +247,7 @@ void receive(serial::terminal& sport)
 					break;
 				case 0x020C:
 					printf("Marked: ");
-					for(uint8_t i=1<<4;i>0;i>>=1)
+					for(uint8_t i=1;i<=1<<4;i<<=1)
 						printf("%c",serial_info.mark_progress&i?'1':'0');
 					printf("\n");
 					serial_info.mark_progress=buf.mark_progress;
@@ -355,7 +355,7 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 			#endif
 			fprintf(stderr,"\n");
 			ret|=4;
-			if(!serial_info.damaging)
+			if(serial_info.game_progress==4&&!serial_info.damaging)
 			{
 				//Apply double damage
 				buf.header.seq=seq++;
@@ -370,7 +370,7 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 						*lock=false;
 					return ret;
 				}
-				fprintf(stderr,"Applying more damages ");
+				fprintf(stderr,"Sent radar cmd ");
 				#ifndef NDEBUG
 				for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
 					fprintf(stderr,"%02hhx ",buf.data[i]);

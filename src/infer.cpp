@@ -197,7 +197,7 @@ static char output(cv::Mat& img,const std::pair<const vector<STrack>, const std:
 				cv::putText(img,std::string("Team: ")+(serial_info.robot_id/100?"Blue":"Red"),cv::Point(350,30),0,1,cv::Scalar(0,255,0),2);
 			{
 				std::string marked("Marked: ");
-				for(uint8_t i=1<<5;i>0;i>>=1)
+				for(uint8_t i=1;i<=1<<4;i<<=1)
 					marked+=serial_info.mark_progress&i?'1':'0';
 				cv::putText(img,marked,cv::Point(5,img.rows-10),0,1,cv::Scalar(0,255,0),2);
 			}

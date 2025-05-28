@@ -17,7 +17,7 @@ extern volatile struct serial_info //See RoboMaster doc
 {
 	uint16_t stage_remain_time;
 	uint8_t robot_id;
-	uint8_t mark_progress:6; //Robot 123457
+	uint8_t mark_progress:5; //Robot 12347
 	uint8_t game_progress:3;
 	uint8_t more_damage:2;
 	uint8_t damaging:1;
