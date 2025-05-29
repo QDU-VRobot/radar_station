@@ -134,7 +134,7 @@ typedef uint16_t frame_tail;
 volatile struct serial_info serial_info;
 static volatile cv::Point2f pos_from_sentry[6];
 static volatile uint8_t count_remaining[6]={0}; //cache for a while
-static volatile uint8_t damaged=0; //Double damage trigger
+static volatile uint8_t damaged=0,cmd=0; //Double damage trigger
 extern std::vector<std::vector<uint8_t>> robot_classes; //HERO=0,ENGINEER,INFANTRY3,INFANTRY4,INFANTRY5,SENTRY
 void receive(serial::terminal& sport)
 {
@@ -194,8 +194,10 @@ void receive(serial::terminal& sport)
 							printf("Double damage triggered due to timeout\n");
 						}
 					}
-					else damaged=0;
-					serial_info.game_progress=buf.game_status.game_progress,serial_info.stage_remain_time=buf.game_status.stage_remain_time;
+					else damaged=0,cmd=0;
+					serial_info.game_progress=buf.game_status.game_progress;
+					if(buf.game_status.game_progress!=5)
+						serial_info.stage_remain_time=buf.game_status.stage_remain_time;
 					break;
 				case 0x0002:
 					switch(buf.winner)
@@ -210,6 +212,7 @@ void receive(serial::terminal& sport)
 							printf("Result: Blue wins!\n");
 							break;
 					}
+					serial_info.stage_remain_time=buf.winner;
 					break;
 				case 0x0003:
 					printf("Robot HP:");
@@ -224,6 +227,10 @@ void receive(serial::terminal& sport)
 						++damaged;
 						printf("Double damage triggered due to low HP\n");
 					}
+					if(serial_info.robot_id/100)
+						serial_info.our_outpost_base_HP=buf.game_robot_HP.blue_HP[6]+buf.game_robot_HP.blue_HP[7],serial_info.oppo_outpost_base_HP=buf.game_robot_HP.red_HP[6]+buf.game_robot_HP.red_HP[7];
+					else
+						serial_info.our_outpost_base_HP=buf.game_robot_HP.red_HP[6]+buf.game_robot_HP.red_HP[7],serial_info.oppo_outpost_base_HP=buf.game_robot_HP.blue_HP[6]+buf.game_robot_HP.blue_HP[7];
 					break;
 				case 0x0104:
 					printf("Robot %hhu is %s %hhu time(s)!\n",buf.referee_warning.offending_robot_id,buf.referee_warning.level>=3?"punished":"warned",buf.referee_warning.count);
@@ -234,7 +241,7 @@ void receive(serial::terminal& sport)
 					{
 						printf("Dart target switched\n");
 						pre_dart_target=buf.dart_info.dart_target;
-						if(serial_info.game_progress==4&&damaged<serial_info.more_damage)
+						if(serial_info.game_progress==4&&serial_info.more_damage>0)
 						{
 							++damaged;
 							printf("Double damage triggered manually\n");
@@ -242,7 +249,7 @@ void receive(serial::terminal& sport)
 					}
 					break;
 				case 0x0201:
-					printf("Robot ID: %hhu (%s)\n",buf.robot_status.robot_id,buf.robot_status.robot_id>=100?"Blue":"Red");
+					printf("Robot ID: %hhu (%s)\n",buf.robot_status.robot_id,buf.robot_status.robot_id/100?"Blue":"Red");
 					serial_info.robot_id=buf.robot_status.robot_id;
 					break;
 				case 0x020C:
@@ -254,6 +261,8 @@ void receive(serial::terminal& sport)
 					break;
 				case 0x020E:
 					printf("Double damages: %hhu%c\n",buf.radar_info&3,buf.radar_info&4?'*':' ');
+					if(serial_info.more_damage<(buf.radar_info&3))
+						++cmd;
 					serial_info.more_damage=buf.radar_info&3,serial_info.damaging=buf.radar_info&4;
 					break;
 				case 0x0301:
@@ -335,6 +344,29 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 			#endif
 			fprintf(stderr,"\n");
 			ret|=1; //Complete, return bit 0 set to 1
+			if(serial_info.game_progress==4&&serial_info.more_damage>0)
+			{
+				//Apply double damage
+				buf.header.seq=seq++;
+				buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.radar_cmd);
+				buf.cmd_id=0x0301;
+				buf.rheader.data_cmd_id=0x0121,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=0x8080;
+				buf.radar_cmd=MIN(damaged,cmd);
+				Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
+				if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
+				{
+					if(lock)
+						*lock=false;
+					return ret;
+				}
+				fprintf(stderr,"Sent radar cmd ");
+				#ifndef NDEBUG
+				for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
+					fprintf(stderr,"%02hhx ",buf.data[i]);
+				#endif
+				fprintf(stderr,"\n");
+				ret|=2;
+			}
 			//Send to another robot
 			buf.header.seq=seq++;
 			buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.robot_pos);
@@ -355,29 +387,6 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 			#endif
 			fprintf(stderr,"\n");
 			ret|=4;
-			if(serial_info.game_progress==4&&!serial_info.damaging)
-			{
-				//Apply double damage
-				buf.header.seq=seq++;
-				buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.radar_cmd);
-				buf.cmd_id=0x0301;
-				buf.rheader.data_cmd_id=0x0121,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=0x8080;
-				buf.radar_cmd=MIN(damaged,serial_info.more_damage);
-				Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
-				if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
-				{
-					if(lock)
-						*lock=false;
-					return ret;
-				}
-				fprintf(stderr,"Sent radar cmd ");
-				#ifndef NDEBUG
-				for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
-					fprintf(stderr,"%02hhx ",buf.data[i]);
-				#endif
-				fprintf(stderr,"\n");
-				ret|=2;
-			}
 		}
 	}
 	if(lock)
