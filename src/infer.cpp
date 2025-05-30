@@ -104,7 +104,7 @@ static std::pair<const vector<STrack>, const std::map<int, std::pair<uint8_t,flo
 	static std::deque<std::future<deploy::DetectRes>> thread_pool;
 	static std::vector<std::unique_ptr<deploy::DetectModel>> car_model_pool;
 	static auto it=car_model_pool.insert(car_model_pool.begin(),car_model->clone());
-	vector<STrack> tracked;
+	static vector<STrack> tracked;
 	static std::map<int,std::pair<uint8_t,float>> track_id;
 	static cv::Mat old_img; //Sometimes img may be empty, so use the old one instead
 	if(thread_pool.size()>0&&(wait_forever&&thread_pool.size()==threads||thread_pool.front().wait_for(wait_timeout)!=std::future_status::timeout)) //Get a inferred result if available

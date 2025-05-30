@@ -311,6 +311,12 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 	size_t count=0;
 	static std::chrono::steady_clock::time_point last_time=std::chrono::steady_clock::now();
 	std::chrono::steady_clock::time_point time=std::chrono::steady_clock::now();
+	if(std::chrono::duration_cast<std::chrono::milliseconds>(time-last_time).count()<40) //About 25Hz
+	{
+		if(lock)
+			*lock=false; //Unlock if lock available
+		return ret;
+	}
 	for(size_t i=0;i<6;++i)
 		if(count_remaining[i]&&--count_remaining[i])
 			pos.data[i*2]=pos_from_sentry[i].x,pos.data[i*2+1]=pos_from_sentry[i].y,++count; //Override pos with sentry's
@@ -324,55 +330,32 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 		}
 	if(count>0)
 	{
-		if(std::chrono::duration_cast<std::chrono::milliseconds>(time-last_time).count()>=40) //About 25Hz
+		last_time=time;
+		//Send pos
+		for(size_t i=0;i<sizeof(union robot_pos)/sizeof(float);++i)
+			buf.map_robot.data[i]=MAX(pos.data[i],0)*100; //Convert unit (m->cm) and ensure not overflow
+		Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
+		if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
 		{
-			last_time=time;
-			//Send pos
-			for(size_t i=0;i<sizeof(union robot_pos)/sizeof(float);++i)
-				buf.map_robot.data[i]=MAX(pos.data[i],0)*100; //Convert unit (m->cm) and ensure not overflow
-			Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
-			if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
-			{
-				if(lock)
-					*lock=false; //Unlock if lock available
-				return ret;
-			}
-			fprintf(stderr,"Sent data to server ");
-			#ifndef NDEBUG
-			for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
-				fprintf(stderr,"%02hhx ",buf.data[i]);
-			#endif
-			fprintf(stderr,"\n");
-			ret|=1; //Complete, return bit 0 set to 1
-			if(serial_info.game_progress==4&&serial_info.more_damage>0)
-			{
-				//Apply double damage
-				buf.header.seq=seq++;
-				buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.radar_cmd);
-				buf.cmd_id=0x0301;
-				buf.rheader.data_cmd_id=0x0121,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=0x8080;
-				buf.radar_cmd=MIN(damaged,cmd);
-				Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
-				if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
-				{
-					if(lock)
-						*lock=false;
-					return ret;
-				}
-				fprintf(stderr,"Sent radar cmd ");
-				#ifndef NDEBUG
-				for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
-					fprintf(stderr,"%02hhx ",buf.data[i]);
-				#endif
-				fprintf(stderr,"\n");
-				ret|=2;
-			}
-			//Send to another robot
+			if(lock)
+				*lock=false; //Unlock if lock available
+			return ret;
+		}
+		fprintf(stderr,"Sent data to server ");
+		#ifndef NDEBUG
+		for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
+			fprintf(stderr,"%02hhx ",buf.data[i]);
+		#endif
+		fprintf(stderr,"\n");
+		ret|=1; //Complete, return bit 0 set to 1
+		if(serial_info.game_progress==4&&serial_info.more_damage>0)
+		{
+			//Apply double damage
 			buf.header.seq=seq++;
-			buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.robot_pos);
+			buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.radar_cmd);
 			buf.cmd_id=0x0301;
-			buf.rheader.data_cmd_id=0x0297,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=team*100+7;
-			buf.robot_pos=pos;
+			buf.rheader.data_cmd_id=0x0121,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=0x8080;
+			buf.radar_cmd=MIN(damaged,cmd);
 			Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
 			if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
 			{
@@ -380,14 +363,34 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 					*lock=false;
 				return ret;
 			}
-			fprintf(stderr,"Sent data to robot ");
+			fprintf(stderr,"Sent radar cmd ");
 			#ifndef NDEBUG
 			for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
 				fprintf(stderr,"%02hhx ",buf.data[i]);
 			#endif
 			fprintf(stderr,"\n");
-			ret|=4;
+			ret|=2;
 		}
+		//Send to another robot
+		buf.header.seq=seq++;
+		buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.robot_pos);
+		buf.cmd_id=0x0301;
+		buf.rheader.data_cmd_id=0x0297,buf.rheader.sender_id=serial_info.robot_id,buf.rheader.receiver_id=team*100+7;
+		buf.robot_pos=pos;
+		Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
+		if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
+		{
+			if(lock)
+				*lock=false;
+			return ret;
+		}
+		fprintf(stderr,"Sent data to robot ");
+		#ifndef NDEBUG
+		for(size_t i=0;i<sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);++i)
+			fprintf(stderr,"%02hhx ",buf.data[i]);
+		#endif
+		fprintf(stderr,"\n");
+		ret|=4;
 	}
 	if(lock)
 		*lock=false;
