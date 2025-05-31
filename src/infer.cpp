@@ -69,7 +69,7 @@ static std::map<int, std::pair<uint8_t,float>> armor_infer(const std::vector<cv:
 	{
 		if(std::find(ids.begin(),ids.end(),i->first)==ids.end())
 		{
-			i->second.second=MIN(i->second.second-1.0/fps,1);
+			i->second.second=MIN(i->second.second-0.5/fps,1);
 			if(i->second.second<=0)
 			{
 				i=tracking.erase(i);
