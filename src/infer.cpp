@@ -157,7 +157,7 @@ static char output(cv::Mat& img,const std::pair<const vector<STrack>, const std:
 		std::vector<uint8_t> ids;
 		for(auto it=result.first.begin();it!=result.first.end();++it)
 		{
-			cv::Point2f pos2d(it->tlbr[0]+it->tlwh[2]/2,it->tlbr[3]-it->tlwh[2]/4); //May not accurate
+			cv::Point2f pos2d(it->tlbr[0]+it->tlwh[2]/2,it->tlbr[3]-it->tlwh[2]/6); //May not accurate
 			float height=0;
 			if(!m1.empty()&&!m2.empty())
 			{

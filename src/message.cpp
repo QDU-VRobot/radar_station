@@ -134,7 +134,7 @@ typedef uint16_t frame_tail;
 volatile struct serial_info serial_info;
 static volatile cv::Point2f pos_from_sentry[6];
 static volatile uint8_t count_remaining[6]={0}; //cache for a while
-static volatile uint8_t damaged=0,cmd=0; //Double damage trigger
+static volatile uint8_t damaged=0,cmd=0; //Double vulnerabilitiy trigger
 extern std::vector<std::vector<uint8_t>> robot_classes; //HERO=0,ENGINEER,INFANTRY3,INFANTRY4,INFANTRY5,SENTRY
 void receive(serial::terminal& sport)
 {
@@ -191,7 +191,7 @@ void receive(serial::terminal& sport)
 						if(buf.game_status.stage_remain_time<90&&damaged<1||buf.game_status.stage_remain_time<50&&damaged<2)
 						{
 							++damaged;
-							printf("Double damage triggered due to timeout\n");
+							printf("Double vulnerabilitiy triggered due to timeout\n");
 						}
 					}
 					else damaged=0,cmd=0;
@@ -225,7 +225,7 @@ void receive(serial::terminal& sport)
 					if(serial_info.game_progress==4&&((buf.game_robot_HP.red_HP[6]==0||buf.game_robot_HP.blue_HP[6]==0)&&damaged<1||(buf.game_robot_HP.red_HP[7]<=2500||buf.game_robot_HP.blue_HP[7]<=2500)&&damaged<2))
 					{
 						++damaged;
-						printf("Double damage triggered due to low HP\n");
+						printf("Double vulnerabilitiy triggered due to low HP\n");
 					}
 					if(serial_info.robot_id/100)
 						serial_info.our_outpost_base_HP=buf.game_robot_HP.blue_HP[6]+buf.game_robot_HP.blue_HP[7],serial_info.oppo_outpost_base_HP=buf.game_robot_HP.red_HP[6]+buf.game_robot_HP.red_HP[7];
@@ -244,7 +244,7 @@ void receive(serial::terminal& sport)
 						if(serial_info.game_progress==4&&serial_info.more_damage>0)
 						{
 							++damaged;
-							printf("Double damage triggered manually\n");
+							printf("Double vulnerabilitiy triggered manually\n");
 						}
 					}
 					break;
@@ -260,7 +260,7 @@ void receive(serial::terminal& sport)
 					serial_info.mark_progress=buf.mark_progress;
 					break;
 				case 0x020E:
-					printf("Double damages: %hhu%c\n",buf.radar_info&3,buf.radar_info&4?'*':' ');
+					printf("Double vulnerabilities: %hhu%c\n",buf.radar_info&3,buf.radar_info&4?'*':' ');
 					if(serial_info.more_damage<(buf.radar_info&3))
 						++cmd;
 					serial_info.more_damage=buf.radar_info&3,serial_info.damaging=buf.radar_info&4;
@@ -350,7 +350,7 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 		ret|=1; //Complete, return bit 0 set to 1
 		if(serial_info.game_progress==4&&serial_info.more_damage>0)
 		{
-			//Apply double damage
+			//Apply double vulnerabilitiy
 			buf.header.seq=seq++;
 			buf.header.data_length=sizeof(buf.rheader)+sizeof(buf.radar_cmd);
 			buf.cmd_id=0x0301;
