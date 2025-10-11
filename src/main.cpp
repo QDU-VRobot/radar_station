@@ -2,6 +2,9 @@
 #include "hikcamera.h"
 #include "serial.h"
 #include "convert.h"
+#include "infer.h"
+#include "message.h"
+#include <signal.h>
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -13,6 +16,7 @@
 #include "opencv2/videoio.hpp"
 #include "opencv2/imgproc.hpp"
 #include "opencv2/imgcodecs.hpp"
+#include "deploy/result.hpp"
 struct model_config //Only used for onnx conversion
 {
 	uint32_t builder_flag; //See NvInfer.h
@@ -36,19 +40,25 @@ struct video_config
 	int quality; //-1=keep original
 };
 static const char* name[2]={"Video","Field"}; //Just for windows' name
-static inline int init_hikcamera(hikcamera::camera& hikcam, uint8_t device_num)
+static inline int init_hikcamera(camera::hikcam& cam, uint8_t device_num)
 {
-	hikcamera::CAMERA_INFO_LIST devlist=hikcamera::camera::enum_cameras(); //USB cameras must be enumerated before opening
+	camera::hikcam::CAMERA_INFO_LIST devlist=camera::hikcam::enum_cameras(); //USB cameras must be enumerated before opening
 	if(devlist.nDeviceNum<=device_num)
 		throw std::runtime_error("Camera not found, check camera connection");
 	std::cerr<<"Using camera "<<static_cast<unsigned>(device_num)<<std::endl;
-	return hikcam.open(devlist.pDeviceInfo[device_num]);
+	return cam.open(devlist.pDeviceInfo[device_num]);
 }
 uint8_t mode; //See help output
-size_t threads; //For car_infer
-std::chrono::milliseconds wait_timeout; //Timeout for inferring to finish per cycle
-serial::terminal sport; //Communicate with judge
-std::vector<std::vector<uint8_t>> robot_classes{{0,1,2,3,4,5},{6,7,8,9,10,11}}; //{Blue{123457},Red{123457}}, Configurable
+size_t threads,rm::inferer::threads; //For car_infer;
+std::chrono::milliseconds wait_timeout,rm::inferer::timeout; //Timeout for inferring to finish per cycle
+std::vector<std::vector<uint8_t>> rm::msg::robot_classes={{0,1,2,3,4,5},{6,7,8,9,10,11}}; //{Blue{123457},Red{123457}}, Configurable
+static bool running=true;
+static void handle_exit(int type) //Exit safely or the recorded video will corrupt!
+{
+	std::cerr<<"Received signal "<<type<<", exiting"<<std::endl;
+	running=false;
+	signal(type,SIG_DFL); //Press again to force exit
+}
 static int convert(const struct model_config& config, size_t threads, const char** car_engine_name=0, const char** armor_engine_name=0)
 {
 	char* car_engine=new char[getsavename(0,config.car_file.c_str(),config.save_ext)+1];
@@ -96,10 +106,10 @@ static int convert(const struct model_config& config, size_t threads, const char
 		delete[] armor_engine;
 	return -1; //Normal
 }
-static std::tuple<int,int,float> apply_video_config(const struct video_config& config, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec)
+static std::tuple<int,int,float> apply_video_config(const struct video_config& config, cv::VideoCapture& cap, camera::hikcam& cam, cv::VideoWriter& rec)
 {
 	int width,height;
-	float fps;
+	float fps=0;
 	if(cap.isOpened())
 	{
 		if(config.fps>0)
@@ -114,47 +124,47 @@ static std::tuple<int,int,float> apply_video_config(const struct video_config& c
 		height=static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
 		fps=cap.get(cv::CAP_PROP_FPS);
 	}
-	if(hikcam.isopened())
+	if(cam.isopened())
 	{
-		union hikcamera::settype s;
+		union camera::hikset s;
 		s.eValue=0;
-		hikcam.set_value(hikcamera::ENUM,"TriggerMode",s);
+		cam.set(camera::ENUM,"TriggerMode",s);
 		if(config.fps!=0)
 		{
 			s.bValue=config.fps>0;
-			hikcam.set_value(hikcamera::BOOL,"AcquisitionFrameRateEnable",s);
+			cam.set(camera::BOOL,"AcquisitionFrameRateEnable",s);
 			if(config.fps>0)
 			{
 				s.fValue=config.fps;
-				hikcam.set_value(hikcamera::FLOAT,"AcquisitionFrameRate",s);
+				cam.set(camera::FLOAT,"AcquisitionFrameRate",s);
 			}
 		}
 		if(config.exposure_time!=0)
 		{
 			s.eValue=config.exposure_time<0?2:0;
-			hikcam.set_value(hikcamera::ENUM,"ExposureAuto",s);
+			cam.set(camera::ENUM,"ExposureAuto",s);
 			if(config.exposure_time>0)
 			{
 				s.fValue=config.exposure_time;
-				hikcam.set_value(hikcamera::FLOAT,"ExposureTime",s);
+				cam.set(camera::FLOAT,"ExposureTime",s);
 			}
 		}
 		if(config.gain!=0)
 		{
 			s.eValue=config.gain<0?2:0;
-			hikcam.set_value(hikcamera::ENUM,"GainAuto",s);
+			cam.set(camera::ENUM,"GainAuto",s);
 			if(config.gain>0)
 			{
 				s.fValue=config.gain;
-				hikcam.set_value(hikcamera::FLOAT,"Gain",s);
+				cam.set(camera::FLOAT,"Gain",s);
 			}
 		}
-		union hikcamera::gettype g;
-		hikcam.get_value(hikcamera::INT,"Width",&g);
+		union camera::hikget g;
+		g=cam.get(camera::INT,"Width");
 		width=g.stIntValue.nCurValue;
-		hikcam.get_value(hikcamera::INT,"Height",&g);
+		g=cam.get(camera::INT,"Height");
 		height=g.stIntValue.nCurValue;
-		hikcam.get_value(hikcamera::FLOAT,"ResultingFrameRate",&g);
+		g=cam.get(camera::FLOAT,"ResultingFrameRate");
 		fps=g.stFloatValue.fCurValue;
 	}
 	if(config.record_file.size())
@@ -358,6 +368,201 @@ static std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>
 	}
 	return std::make_tuple(rvec,tvec,contours);
 }
+static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const std::map<int, std::pair<uint8_t,float>>>& result, const cv::Mat& m1, const cv::Mat& m2, const std::vector<std::pair<std::vector<cv::Point2f>,float>>& contours, cv::VideoWriter& rec, rm::msg& msger, cv::Mat&& example_img, float scale, unsigned short latency=0) //Display, send to judge or record
+{
+	static bool serial_busy=false; //Prevent infinite thread creation
+	std::vector<cv::Point2f> center_points; //Mark to the minimap and send to server
+	if((mode&1)==1&&result.first.size()>0)
+	{
+		std::vector<uint8_t> ids;
+		for(auto it=result.first.begin();it!=result.first.end();++it)
+		{
+			cv::Point2f pos2d(it->tlbr[0]+it->tlwh[2]/2,it->tlbr[3]-it->tlwh[2]/6); //May not accurate
+			float height=0;
+			if(!m1.empty()&&!m2.empty())
+			{
+				for(auto i=contours.begin();i!=contours.end();++i)
+					if(cv::pointPolygonTest(i->first,pos2d,false)>0) //In a contour, which means different height
+					{
+						height=i->second;
+						break;
+					}
+				pos2d=backProjectPoint(cv::Point3d(pos2d.x,pos2d.y,height),m1,m2);
+			}
+			center_points.push_back(pos2d);
+			std::cout<<it->track_id<<':'<<'['<<pos2d.x<<','<<pos2d.y<<','<<height<<']'<<';';
+			if(result.second.count(it->track_id))
+			{
+				std::cout<<static_cast<unsigned>(result.second.at(it->track_id).first)<<','<<result.second.at(it->track_id).second;
+				ids.push_back(result.second.at(it->track_id).first);
+			}
+			else
+				ids.push_back(-1);
+			std::cout<<std::endl;
+		}
+		if((mode&11)==11&&!serial_busy&&msger.serial_info.robot_id)
+			serial_busy=true,std::thread(&rm::msg::send_pos,&msger,center_points,ids).detach(); //Use a new thread for a blocking task
+	}
+	if(!img.empty()&&((mode&4)==4||(mode&48)&&rec.isOpened()))
+	{
+		if((mode&16)==16&&rec.isOpened())
+			rec.write(img);
+		//Draw on output image
+		cv::putText(img,std::string("Latency: ")+std::to_string(latency)+"ms",cv::Point(img.cols-255,30),0,1,cv::Scalar(0,255,0),2);
+		if((mode&8)==8)
+		{
+			cv::putText(img,std::string("State: ")+std::to_string(msger.serial_info.game_progress),cv::Point(5,30),0,1,cv::Scalar(0,255,0),2);
+			if(msger.serial_info.game_progress==5)
+			{
+				const char* winner="";
+				switch(msger.serial_info.stage_remain_time)
+				{
+					case 0:
+						winner="Draw";
+						break;
+					case 1:
+						winner="Red";
+						break;
+					case 2:
+						winner="Blue";
+						break;
+				}
+				cv::putText(img,std::string("Winner: ")+winner,cv::Point(150,30),0,1,cv::Scalar(0,255,0),2);
+			}
+			else cv::putText(img,std::string("Timer: ")+std::to_string(msger.serial_info.stage_remain_time/60)+':'+std::to_string(msger.serial_info.stage_remain_time%60),cv::Point(150,30),0,1,cv::Scalar(0,255,0),2);
+			if(msger.serial_info.robot_id)
+				cv::putText(img,std::string("Team: ")+(msger.serial_info.robot_id/100?"Blue":"Red"),cv::Point(350,30),0,1,cv::Scalar(0,255,0),2);
+			{
+				std::string marked("Marked: ");
+				for(uint8_t i=1;i<=1<<4;i<<=1)
+					marked+=msger.serial_info.mark_progress&i?'1':'0';
+				cv::putText(img,marked,cv::Point(img.cols-460,img.rows-10),0,1,cv::Scalar(0,255,0),2);
+			}
+			cv::putText(img,std::string("HP: ")+std::to_string(msger.serial_info.our_outpost_base_HP)+'/'+std::to_string(msger.serial_info.oppo_outpost_base_HP),cv::Point(5,img.rows-10),0,1,cv::Scalar(0,255,0),2);
+			cv::putText(img,std::string("Damages: ")+std::to_string(msger.serial_info.more_damage)+(msger.serial_info.damaging?'*':' '),cv::Point(img.cols-210,img.rows-10),0,1,cv::Scalar(0,255,0),2);
+		}
+		for(auto it=result.first.begin();it!=result.first.end();++it)
+		{
+			cv::rectangle(img,cv::Rect(it->tlwh[0],it->tlwh[1],it->tlwh[2],it->tlwh[3]),cv::Scalar(0,255,0),2);
+			cv::putText(img,std::to_string(it->track_id)+':'+std::to_string(it->score),cv::Point(it->tlbr[0],it->tlbr[1]),1,1,cv::Scalar(0,255,0),1);
+			if((mode&3)==3&&result.second.count(it->track_id))
+				cv::putText(img,std::to_string(result.second.at(it->track_id).first)+':'+std::to_string(result.second.at(it->track_id).second),cv::Point(it->tlbr[0],it->tlbr[3]),1,1,cv::Scalar(0,255,0),1);
+		}
+		if((mode&32)==32&&rec.isOpened())
+			rec.write(img);
+		if((mode&4)==4)
+		{
+			if(!example_img.empty())
+			{
+				for(auto it=center_points.begin();it!=center_points.end();++it)
+					cv::circle(example_img,m1.empty()||m2.empty()?cv::Point(it->x*example_img.cols/img.cols,it->y*example_img.rows/img.rows):cv::Point(it->x*scale,example_img.rows-it->y*scale),2,cv::Scalar(0,255,0),cv::LineTypes::FILLED);
+				cv::imshow("Minimap",example_img);
+			}
+			cv::imshow("Radar",img);
+			return cv::waitKey(1);
+		}
+	}
+	return -1;
+}
+int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::hikcam& cam, cv::VideoWriter& rec, rm::msg& msger, const std::tuple<int,int,float>& image_arg, const std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>,float>>>& pose_points, const cv::Mat& cam_matrix, const cv::Mat& dist_coeffs, const cv::Mat& example_img, float scale)
+{
+	unsigned int err_counter=0;
+	cv::Mat img,map,m1,m2;
+	if(!cam_matrix.empty())
+	{
+		cv::Mat tmp;
+		cv::initUndistortRectifyMap(cam_matrix,dist_coeffs,cv::Mat(),cv::Mat(),cv::Size(std::get<0>(image_arg),std::get<1>(image_arg)),CV_32FC2,map,tmp); //Undistort before backProjectPoint
+	}
+	if(!std::get<0>(pose_points).empty())
+	{
+		//Calculate matrices used by backProjectPoint
+		cv::Mat rinv,cam_matrix_inv;
+		cv::Rodrigues(std::get<0>(pose_points),rinv);
+		cv::invert(rinv,rinv);
+		cv::invert(cam_matrix.empty()?calculateCameraMatrix(cv::Size(std::get<0>(image_arg),std::get<1>(image_arg)),acos(0.5)):cam_matrix,cam_matrix_inv);
+		m1=rinv*cam_matrix_inv,m2=rinv*std::get<1>(pose_points);
+	}
+	std::pair<vector<STrack>, std::map<int, std::pair<uint8_t,float>>> result;
+	std::cout<<"Video starting"<<std::endl;
+	if(signal(SIGINT,handle_exit)==SIG_ERR||signal(SIGHUP,handle_exit)==SIG_ERR||signal(SIGTERM,handle_exit)==SIG_ERR)
+		std::cerr<<"Signal registration failed"<<std::endl;
+	if(cap.isOpened())
+	{
+		do
+			while(!(err_counter=!cap.read(img))&&running)
+			{
+				static std::chrono::steady_clock::time_point old_timestamp=std::chrono::steady_clock::now();
+				std::chrono::steady_clock::time_point now=std::chrono::steady_clock::now();
+				if(!cam_matrix.empty())
+				{
+					cv::Mat tmp;
+					cv::remap(img,tmp,map,cv::Mat(),INTER_LINEAR); //Cannot undistort in-place
+					img=std::move(tmp);
+				}
+				if((mode&1)==1)
+				{
+					deploy::DetectRes inferred=rainfer.infer(img);
+					if(inferred.num>0)
+						result=rainfer.track(inferred,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp));
+				}
+				std::cerr<<"Cycle: "<<std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count()<<"ms"<<std::endl;
+				if(output(img,result,m1,m2,std::get<2>(pose_points),rec,msger,example_img.clone(),scale,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp).count())==27)
+					running=false; //ESC to exit
+				old_timestamp=now;
+			}
+			while(running&&(mode&64)==64&&cap.set(cv::CAP_PROP_POS_FRAMES,0));
+			std::cout<<"Video stopped"<<std::endl;
+	}
+	else if(cam.isopened())
+	{
+		if(cam.start()!=camera::hikcam::OK)
+		{
+			std::cerr<<"An error occurred while starting video ["<<camera::hikcam::last_error<<"]"<<std::endl;
+			if(cam.set(camera::COMMAND,"DeviceReset")==camera::hikcam::OK)
+				std::cerr<<"Reset command has been sent, please retry later"<<std::endl;
+			return 2;
+		}
+		camera::hikcam::FRAME frame;
+		while(err_counter<MAX(2000/wait_timeout.count(),10000/std::get<2>(image_arg))&&running) //2s or 10 pictures
+		{
+			frame=cam.grab(wait_timeout.count());
+			err_counter=camera::hikcam::last_error==camera::hikcam::OK?0:err_counter+1;
+			static int64_t old_timestamp=frame.stFrameInfo.nHostTimeStamp;
+			img=cv::Mat(frame.stFrameInfo.nHeight,frame.stFrameInfo.nWidth,CV_8UC1,frame.pBufAddr);
+			if(!err_counter)
+			{
+				cv::Mat tmp;
+				cv::cvtColor(img,tmp,cv::COLOR_BayerBG2RGB);
+				if(!cam_matrix.empty())
+					cv::remap(tmp,img,map,cv::Mat(),INTER_LINEAR);
+				else
+					img=std::move(tmp);
+			}
+			if((mode&1)==1)
+			{
+				deploy::DetectRes inferred=rainfer.infer(img);
+				if(inferred.num>0)
+					result=rainfer.track(inferred,std::chrono::milliseconds(frame.stFrameInfo.nHostTimeStamp-old_timestamp));
+			}
+			if(!err_counter)
+			{
+				std::cerr<<"Interval: "<<frame.stFrameInfo.nHostTimeStamp-old_timestamp<<"ms"<<std::endl;
+				cv::cvtColor(img,img,cv::COLOR_RGB2BGR);
+			}
+			if(output(img,result,m1,m2,std::get<2>(pose_points),rec,msger,example_img.clone(),scale,frame.stFrameInfo.nHostTimeStamp-old_timestamp)==27)
+				running=false; //ESC to exit
+			if(!err_counter)
+			{
+				old_timestamp=frame.stFrameInfo.nHostTimeStamp;
+				cam.free(frame);
+			}
+		}
+		cam.stop();
+		std::cout<<"Video stopped ["<<(err_counter=camera::hikcam::last_error)<<"]"<<std::endl;
+	}
+	cv::destroyAllWindows();
+	return err_counter;
+}
 int main(int argc, char** argv)
 {
 	int ret;
@@ -371,7 +576,7 @@ int main(int argc, char** argv)
 		args.printMessage();
 		return 0;
 	}
-	mode=args.get<unsigned>("m"),threads=args.get<size_t>("t"),wait_timeout=std::chrono::milliseconds(args.get<unsigned>("w"));
+	mode=args.get<unsigned>("m"),rm::inferer::threads=threads=args.get<size_t>("t"),wait_timeout=std::chrono::milliseconds(args.get<unsigned>("w"));
 	struct model_config model_config={args.get<uint32_t>("B"),args.get<std::string>("c"),args.get<std::string>("a"),args.has("n")?0:".engine",args.get<int>("tensor-width"),args.get<int>("tensor-height"),args.get<int>("b")};
 	struct video_config video_config={args.get<unsigned>("V"),args.get<std::string>("@file"),args.get<unsigned>("V")!=0?args.get<unsigned>("@file"):0,args.get<float>("f"),args.get<float>("e"),args.get<float>("g"),args.get<std::string>("R"),args.get<std::string>("fourcc"),args.get<int>("q")};
 	cv::Mat cam_matrix,dist_coeffs,example_img;
@@ -387,7 +592,7 @@ int main(int argc, char** argv)
 			config["rvec"]>>std::get<0>(pose_points),config["tvec"]>>std::get<1>(pose_points);
 			config["contours"]>>points,config["contour_heights"]>>heights;
 			if(!config["robot_classes"].empty())
-				config["robot_classes"]>>robot_classes;
+				config["robot_classes"]>>rm::msg::robot_classes;
 			heights.resize(points.size());
 			for(size_t i=0;i<points.size();++i)
 				std::get<2>(pose_points).emplace_back(std::move(points[i]),heights[i]);
@@ -425,17 +630,19 @@ int main(int argc, char** argv)
 	std::cout<<" FPS: "<<video_config.fps<<" Exposure time: "<<video_config.exposure_time<<" Gain: "<<video_config.gain<<std::endl;
 	std::cout<<"Camera matrix:\n"<<cam_matrix<<"\nDistortion coefficients:\n"<<dist_coeffs<<std::endl;
 	//Part 3 Open serial port
+	serial::terminal sport; //Communicate with judge
+	rm::msg msger(sport);
 	if((mode&8)==8)
 		if(open_serial(sport,args.get<std::string>("s").c_str()))
-			std::thread(receive,std::ref(sport)).detach();
-		else
-		{
-			std::cerr<<"Serial port is not available"<<std::endl;
-			mode&=~8;
-		}
+			std::thread(&rm::msg::receive,&msger).detach();
+	else
+	{
+		std::cerr<<"Serial port is not available"<<std::endl;
+		mode&=~8;
+	}
 	//Part 4.1 Open video
 	cv::VideoCapture cap;
-	hikcamera::camera hikcam;
+	camera::hikcam cam;
 	switch(video_config.video_type)
 	{
 		case 0:
@@ -445,17 +652,17 @@ int main(int argc, char** argv)
 			cap.open(video_config.video_device);
 			break;
 		case 2:
-			if(init_hikcamera(hikcam,video_config.video_device)!=hikcamera::OK&&!hikcam.get_handle())
+			if(init_hikcamera(cam,video_config.video_device)!=camera::hikcam::OK&&!cam.get_handle())
 			{
-				std::cerr<<"Camera init failed! ["<<hikcamera::camera::last_error<<"]"<<std::endl;
+				std::cerr<<"Camera init failed! ["<<camera::hikcam::last_error<<"]"<<std::endl;
 				return 1;
 			}
-			while(!hikcam.isopened()&&hikcam.open()!=hikcamera::OK)
+			while(!cam.isopened()&&cam.open()!=camera::hikcam::OK)
 			{
-				std::cerr<<"Cannot open camera ["<<hikcamera::camera::last_error<<"]"<<std::endl;
+				std::cerr<<"Cannot open camera ["<<camera::hikcam::last_error<<"]"<<std::endl;
 				std::this_thread::sleep_for(std::chrono::seconds(1));
 			}
-			std::cerr<<"Video handle: "<<hikcam.get_handle()<<std::endl;
+			std::cerr<<"Video handle: "<<cam.get_handle()<<std::endl;
 			break;
 		default:
 			std::cerr<<"Wrong video type "<<static_cast<unsigned>(video_config.video_type)<<std::endl;
@@ -467,14 +674,14 @@ int main(int argc, char** argv)
 	{
 		cv::VideoWriter rec;
 		//Part 4.2 Apply config
-		std::tuple<int,int,float> image_arg=apply_video_config(video_config,cap,hikcam,rec);
+		std::tuple<int,int,float> image_arg=apply_video_config(video_config,cap,cam,rec);
 		//Part 4.3 Mark points (if not done)
 		if((std::get<0>(pose_points).empty()||std::get<1>(pose_points).empty())&&(mode&5)==5)
 		{
 			cv::Mat img;
-			if(hikcam.isopened()&&hikcam.start()!=hikcamera::OK)
+			if(cam.isopened()&&cam.start()!=camera::hikcam::OK)
 			{
-				std::cerr<<"An error occurred while starting video ["<<hikcamera::camera::last_error<<"]"<<std::endl;
+				std::cerr<<"An error occurred while starting video ["<<camera::hikcam::last_error<<"]"<<std::endl;
 				return 2;
 			}
 			std::cout<<"Press any key to mark points"<<std::endl;
@@ -482,23 +689,23 @@ int main(int argc, char** argv)
 			{
 				if(cap.isOpened())
 					cap.read(img);
-				else if(hikcam.isopened())
+				else if(cam.isopened())
 				{
-					hikcamera::FRAME frame;
-					if(hikcam.grab_frame(&frame,-1)!=hikcamera::OK)
+					camera::hikcam::FRAME frame=cam.grab();
+					if(camera::hikcam::last_error!=camera::hikcam::OK)
 					{
-						std::cerr<<"An error occurred while capturing video ["<<hikcamera::camera::last_error<<"]"<<std::endl;
+						std::cerr<<"An error occurred while capturing video ["<<camera::hikcam::last_error<<"]"<<std::endl;
 						break;
 					}
 					img=cv::Mat(frame.stFrameInfo.nHeight,frame.stFrameInfo.nWidth,CV_8UC1,frame.pBufAddr);
 					if(!img.empty())
 						cv::cvtColor(img,img,cv::COLOR_BayerBG2BGR);
-					hikcam.free_frame(&frame);
+					cam.free(frame);
 				}
 			}
 			while(!img.empty()&&(cv::imshow(name[0],img),cv::waitKey(wait_timeout.count()*100)==-1));
-			if(hikcam.isopened())
-				hikcam.stop();
+			if(cam.isopened())
+				cam.stop();
 			if(!img.empty())
 			{
 				std::cerr<<"Marking field points"<<std::endl;
@@ -529,8 +736,10 @@ int main(int argc, char** argv)
 			else std::cerr<<"Image is empty"<<std::endl;
 		}
 		std::cout<<"rvec:\n"<<std::get<0>(pose_points)<<"\ntvec:\n"<<std::get<1>(pose_points)<<"\ncontours count: "<<std::get<2>(pose_points).size()<<std::endl;
-		//Part 5 Read image, infer & Show (see infer.cpp)
-		ret=run(model_config.save_ext?car_engine:model_config.car_file.c_str(),model_config.save_ext?armor_engine:model_config.armor_file.c_str(),image_arg,cap,hikcam,rec,sport,video_config.video_device==0,pose_points,cam_matrix,dist_coeffs,example_img,args.get<float>("S"));
+		//Part 5 Read image, infer & Show
+		rm::inferer::threads=threads,rm::inferer::timeout=video_config.video_device==0?std::chrono::milliseconds(0):wait_timeout;
+		rm::inferer rainfer(model_config.save_ext?car_engine:model_config.car_file.c_str(),true,image_arg,model_config.save_ext?armor_engine:model_config.armor_file.c_str(),true);
+		ret=run(rainfer,cap,cam,rec,msger,image_arg,pose_points,cam_matrix,dist_coeffs,example_img,args.get<float>("S"));
 	}
 	if(model_config.save_ext)
 	{

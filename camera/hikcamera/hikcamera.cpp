@@ -1,69 +1,69 @@
 #include "hikcamera.h"
 #include <stdexcept>
-namespace hikcamera
+namespace camera
 {
-	int camera::last_error=0;
-	camera::camera(const CAMERA_INFO* pstDevInfo):handle(0),is_opened(false)
+	int hikcam::last_error=0;
+	hikcam::hikcam(const CAMERA_INFO* pstDevInfo):handle(0)
 	{
 		if(pstDevInfo)
-			camera::open(pstDevInfo);
+			hikcam::open(pstDevInfo);
 	}
-	camera::camera(const camera& cam):handle(0),is_opened(false)
+	hikcam::hikcam(const hikcam& cam):handle(0)
 	{
 		*this=cam;
 	}
-	camera& camera::operator=(const camera& cam)
+	hikcam& hikcam::operator=(const hikcam& cam)
 	{
 		if(cam.is_opened)
 			throw std::runtime_error("Camera must be closed before copying");
-		camera::~camera();
+		hikcam::~hikcam();
 		if(cam.handle)
 		{
 			CAMERA_INFO info;
 			if(MV_CC_GetDeviceInfo(cam.handle,&info)==MV_OK)
-				camera::open(&info);
+				hikcam::open(&info);
 		}
 		return *this;
 	}
-	CAMERA_INFO_LIST camera::enum_cameras(unsigned int nTLayerType)
+	hikcam::CAMERA_INFO_LIST hikcam::enum_cameras(unsigned int nTLayerType)
 	{
 		MV_CC_DEVICE_INFO_LIST pstDevList={0};
 		last_error=MV_CC_EnumDevices(nTLayerType,&pstDevList);
 		return pstDevList;
 	}
-	int camera::open(const CAMERA_INFO* pstDevInfo, unsigned int nAccessMode)
+	int hikcam::open(const CAMERA_INFO* pstDevInfo)
 	{
+		unsigned int nAccessMode = MV_ACCESS_Control;
 		if((!is_opened||(last_error=close())==MV_OK)&&(handle||(last_error=MV_CC_CreateHandle(&handle,pstDevInfo))==MV_OK))
 			is_opened=(last_error=MV_CC_OpenDevice(handle,nAccessMode))==MV_OK;
 		return last_error;
 	}
-	int camera::get_value(enum datatype type,const char* strKey,union gettype* value) const
+	union hikget hikcam::get(enum datatype type,const char* strKey) const
 	{
-		if(!value&&type!=COMMAND)
-			return -1;
+		union hikget value;
 		switch(type)
 		{
 			case INT:
-				last_error=MV_CC_GetIntValueEx(handle,strKey,&value->stIntValue);
+				last_error=MV_CC_GetIntValueEx(handle,strKey,&value.stIntValue);
 				break;
 			case ENUM:
-				last_error=MV_CC_GetEnumValue(handle,strKey,&value->stEnumValue);
+				last_error=MV_CC_GetEnumValue(handle,strKey,&value.stEnumValue);
 				break;
 			case FLOAT:
-				last_error=MV_CC_GetFloatValue(handle,strKey,&value->stFloatValue);
+				last_error=MV_CC_GetFloatValue(handle,strKey,&value.stFloatValue);
 				break;
 			case BOOL:
-				last_error=MV_CC_GetBoolValue(handle,strKey,&value->bValue);
+				last_error=MV_CC_GetBoolValue(handle,strKey,&value.bValue);
 				break;
 			case STRING:
-				last_error=MV_CC_GetStringValue(handle,strKey,&value->stStringValue);
+				last_error=MV_CC_GetStringValue(handle,strKey,&value.stStringValue);
 				break;
 			default:
-				return -1;
+				throw std::range_error("Invalid type");
 		}
-		return last_error;
+		return value;
 	}
-	int camera::set_value(enum datatype type,const char* strKey,const union settype& value)
+	int hikcam::set(enum datatype type,const char* strKey,const union hikset& value)
 	{
 		switch(type)
 		{
@@ -90,31 +90,35 @@ namespace hikcamera
 		}
 		return last_error;
 	}
-	int camera::start(void(cbOutput)(unsigned char * pData, FRAME_INFO* pFrameInfo, void* pUser),void* pUser)
+	int hikcam::start(void)
 	{
-		if(cbOutput&&(last_error=MV_CC_RegisterImageCallBackEx(handle,cbOutput,pUser))!=MV_OK)
-			return last_error;
 		return last_error=MV_CC_StartGrabbing(handle);
 	}
-	int camera::grab_frame(FRAME* pstFrame, unsigned int nMsec) const
+	int hikcam::grab_callback(void(cbOutput)(unsigned char * pData, FRAME_INFO* pFrameInfo, void* pUser),void* pUser)
 	{
-		return last_error=MV_CC_GetImageBuffer(handle,pstFrame,nMsec);
+		return last_error=MV_CC_RegisterImageCallBackEx(handle,cbOutput,pUser);
 	}
-	int camera::free_frame(FRAME* pstFrame) const
+	hikcam::FRAME hikcam::grab(unsigned int nMsec)
 	{
-		return last_error=MV_CC_FreeImageBuffer(handle,pstFrame);
+		FRAME pstFrame;
+		last_error=MV_CC_GetImageBuffer(handle,&pstFrame,nMsec);
+		return pstFrame;
 	}
-	int camera::stop(void)
+	int hikcam::free(FRAME& pstFrame)
+	{
+		return last_error=MV_CC_FreeImageBuffer(handle,&pstFrame);
+	}
+	int hikcam::stop(void)
 	{
 		return last_error=MV_CC_StopGrabbing(handle);
 	}
-	int camera::close(void)
+	int hikcam::close(void)
 	{
 		if((last_error=MV_CC_CloseDevice(handle))==MV_OK)
 			is_opened=false;
 		return last_error;
 	}
-	camera::~camera()
+	hikcam::~hikcam()
 	{
 		if(handle)
 			last_error=MV_CC_DestroyHandle(handle);

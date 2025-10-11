@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.6...3.18)
 
-project(hikcamera CXX)
+project(camera CXX)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
@@ -18,8 +18,9 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_NAME}_SOURCE)
-add_library(${PROJECT_NAME} ${${PROJECT_NAME}_SOURCE})
-target_include_directories(${PROJECT_NAME} PUBLIC ${MVS_INCLUDE_DIRS})
+aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/hikcamera hikcamera_SOURCE)
+add_library(${PROJECT_NAME} ${${PROJECT_NAME}_SOURCE} ${hikcamera_SOURCE})
+target_include_directories(${PROJECT_NAME} PUBLIC ${MVS_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/hikcamera)
 target_link_libraries(${PROJECT_NAME} ${MVS_LIBS})
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")

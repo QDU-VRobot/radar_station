@@ -1,153 +1,23 @@
-#include "serial.h"
+#include "message.h"
 #include "common.h"
+#include "serial.h"
 #include "RM_CRC.h"
 #include <stdio.h>
 #include <algorithm>
-#include <string>
 #include <chrono>
 #include <thread>
-#define MAX_BUF 256
-//See RoboMaster file
-#pragma pack(1)
-struct header
+const union rm::frame rm::msg::buf_temp={{{0xA5,sizeof(union map_robot)},0x0305,{.map_robot={.data={0}}}}};
+void rm::msg::receive(void)
 {
-	uint8_t SOF;
-	uint16_t data_length;
-	uint8_t seq;
-	uint8_t CRC8;
-};
-struct game_status
-{
-	uint8_t game_type : 4;
-	uint8_t game_progress : 4;
-	uint16_t stage_remain_time;
-	uint64_t SyncTimeStamp;
-};
-struct game_robot_HP
-{
-	uint16_t red_HP[8]; //123457OB
-	uint16_t blue_HP[8];
-};
-struct referee_warning
-{
-	uint8_t level;
-	uint8_t offending_robot_id;
-	uint8_t count;
-};
-struct dart_info
-{
-	uint8_t dart_remaining_time;
-	uint8_t dart_shot : 3;
-	uint8_t dart_count : 3;
-	uint8_t dart_target : 2;
-	uint8_t reserved;
-};
-struct robot_status
-{
-	uint8_t robot_id;
-	uint8_t robot_level;
-	uint16_t current_HP;
-	uint16_t maximum_HP;
-	uint16_t shooter_barrel_cooling_value;
-	uint16_t shooter_barrel_heat_limit;
-	uint16_t chassis_power_limit;
-	uint8_t power_management_gimbal_output : 1;
-	uint8_t power_management_chassis_output : 1;
-	uint8_t power_management_shooter_output : 1;
-};
-struct robot_interaction_data_header
-{
-	uint16_t data_cmd_id;
-	uint16_t sender_id;
-	uint16_t receiver_id;
-};
-union map_robot
-{
-	struct
-	{
-		uint16_t hero_position_x;
-		uint16_t hero_position_y;
-		uint16_t engineer_position_x;
-		uint16_t engineer_position_y;
-		uint16_t infantry_3_position_x;
-		uint16_t infantry_3_position_y;
-		uint16_t infantry_4_position_x;
-		uint16_t infantry_4_position_y;
-		uint16_t infantry_5_position_x;
-		uint16_t infantry_5_position_y;
-		uint16_t sentry_position_x;
-		uint16_t sentry_position_y;
-	};
-	uint16_t data[12];
-};
-union robot_pos
-{
-	struct
-	{
-		float hero_x;
-		float hero_y;
-		float engineer_x;
-		float engineer_y;
-		float standard_3_x;
-		float standard_3_y;
-		float standard_4_x;
-		float standard_4_y;
-		float standard_5_x;
-		float standard_5_y;
-		float sentry_x;
-		float sentry_y;
-	};
-	float data[12];
-};
-union frame
-{
-	struct
-	{
-		struct header header;
-		uint16_t cmd_id;
-		union
-		{
-			struct game_status game_status;
-			uint8_t winner;
-			struct game_robot_HP game_robot_HP;
-			struct referee_warning referee_warning;
-			struct dart_info dart_info;
-			struct robot_status robot_status;
-			uint8_t mark_progress;
-			uint8_t radar_info;
-			struct
-			{
-				struct robot_interaction_data_header rheader;
-				union
-				{
-					uint8_t radar_cmd;
-					union robot_pos robot_pos;
-				};
-			};
-			union map_robot map_robot;
-		};
-	};
-	uint8_t data[MAX_BUF];
-};
-typedef uint16_t frame_tail;
-#pragma pack()
-volatile struct serial_info serial_info;
-static volatile cv::Point2f pos_from_sentry[6];
-static volatile uint8_t count_remaining[6]={0}; //cache for a while
-static volatile uint8_t damaged=0,cmd=0; //Double vulnerabilitiy trigger
-extern std::vector<std::vector<uint8_t>> robot_classes; //HERO=0,ENGINEER,INFANTRY3,INFANTRY4,INFANTRY5,SENTRY
-void receive(serial::terminal& sport)
-{
-	union frame buf;
 	int state;
-	while((mode&8)==8)
+	while(sport.get_fd()>=0) //Loop if not closed manually
 	{
-		while(sport.get_fd()>=0)
+		while(sport.get_fd()>=0) //Loop unless an error occurred
 		{
 			state=sport.read(&buf.header,1); //Read SOF
 			if(state<0)
 				break;
-			if(buf.header.SOF!=0xA5)
+			if(buf.header.SOF!=buf_temp.header.SOF)
 			{
 				#ifndef NDEBUG
 				fprintf(stderr,"Skipping non-header data: %02hhx\n",buf.header.SOF);
@@ -302,19 +172,19 @@ void receive(serial::terminal& sport)
 		}
 	}
 }
-uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids, bool* lock)
+uint8_t rm::msg::send_pos(const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids)
 {
-	static uint8_t seq=0;
-	union frame buf={{{0xA5,sizeof(union map_robot),seq++},0x0305,{.map_robot={.data={0}}}}};
+	if(locked)
+		return -1;
+	else locked=true;
+	union frame buf=buf_temp;
 	uint8_t team=serial_info.robot_id/100,ret=0;
 	union robot_pos pos={.data={0}};
 	size_t count=0;
-	static std::chrono::steady_clock::time_point last_time=std::chrono::steady_clock::now();
 	std::chrono::steady_clock::time_point time=std::chrono::steady_clock::now();
 	if(std::chrono::duration_cast<std::chrono::milliseconds>(time-last_time).count()<40) //About 25Hz
 	{
-		if(lock)
-			*lock=false; //Unlock if lock available
+		locked=false; //Unlock if lock available
 		return ret;
 	}
 	for(size_t i=0;i<6;++i)
@@ -332,13 +202,13 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 	{
 		last_time=time;
 		//Send pos
+		buf.header.seq=seq++;
 		for(size_t i=0;i<sizeof(union robot_pos)/sizeof(float);++i)
 			buf.map_robot.data[i]=MAX(pos.data[i],0)*100; //Convert unit (m->cm) and ensure not overflow
 		Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
 		if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
 		{
-			if(lock)
-				*lock=false; //Unlock if lock available
+			locked=false; //Unlock if lock available
 			return ret;
 		}
 		fprintf(stderr,"Sent data to server ");
@@ -359,8 +229,7 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 			Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
 			if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
 			{
-				if(lock)
-					*lock=false;
+				locked=false;
 				return ret;
 			}
 			fprintf(stderr,"Sent radar cmd ");
@@ -380,8 +249,7 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 		Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(&buf.header),sizeof(buf.header));
 		if(sport.write_wCRC16(&buf.data,sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail))<static_cast<int>(sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail)))
 		{
-			if(lock)
-				*lock=false;
+			locked=false;
 			return ret;
 		}
 		fprintf(stderr,"Sent data to robot ");
@@ -392,7 +260,6 @@ uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_
 		fprintf(stderr,"\n");
 		ret|=4;
 	}
-	if(lock)
-		*lock=false;
+	locked=false;
 	return ret;
 }

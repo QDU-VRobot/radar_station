@@ -1,3 +1,5 @@
+include(FindPackageHandleStandardArgs)
+
 if(NOT MVCAM_SDK_PATH)
     set(MVCAM_SDK_PATH /opt/MVS CACHE PATH "MVS root path")
 endif()

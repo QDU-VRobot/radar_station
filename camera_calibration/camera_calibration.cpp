@@ -130,14 +130,14 @@ static void calcChessboardCorners(Size boardSize, float squareSize, vector<Point
 				for( int j = 0; j < boardSize.width; j++ )
 					corners.push_back(Point3f(float(j*squareSize),
 											  float(i*squareSize), 0));
-					break;
+		break;
 
 		case ASYMMETRIC_CIRCLES_GRID:
 			for( int i = 0; i < boardSize.height; i++ )
 				for( int j = 0; j < boardSize.width; j++ )
 					corners.push_back(Point3f(float((2*j + i % 2)*squareSize),
 											  float(i*squareSize), 0));
-					break;
+		break;
 
 		default:
 			CV_Error(Error::StsBadArg, "Unknown pattern type\n");
@@ -340,7 +340,7 @@ static bool runAndSave(const string& outputFilename,
 						  writePoints ? imagePoints : vector<vector<Point2f> >(),
 						  writeGrid ? newObjPoints : vector<Point3f>(),
 						  totalAvgErr );
-		return ok;
+	return ok;
 }
 
 int main( int argc, char** argv )
@@ -356,7 +356,8 @@ int main( int argc, char** argv )
 	bool undistortImage = false;
 	int flags = 0;
 	VideoCapture capture;
-	hikcamera::camera hikcam;
+	camera::hikcam hikcam;
+	camera::camera<void*,void*,void*,void*>* cam=0;
 	bool flipVertical;
 	bool showUndistorted;
 	Source videotype = GENERIC;
@@ -481,28 +482,28 @@ int main( int argc, char** argv )
 		capture.open(inputFilename);
 	else if( videotype == HIKCAMERA )
 	{
-		hikcamera::CAMERA_INFO_LIST devlist=hikcamera::camera::enum_cameras();
-		hikcam=hikcamera::camera(devlist.pDeviceInfo[cameraId]);
-		hikcam.open();
-		union hikcamera::settype s;
+		camera::hikcam::CAMERA_INFO_LIST devlist=camera::hikcam::enum_cameras();
+		hikcam.open(devlist.pDeviceInfo[cameraId]);
+		union camera::hikset s;
 		s.eValue=0;
-		hikcam.set_value(hikcamera::ENUM,"TriggerMode",s);
+		hikcam.set(camera::ENUM,"TriggerMode",s);
 		s.bValue=0;
-		hikcam.set_value(hikcamera::BOOL,"AcquisitionFrameRateEnable",s);
+		hikcam.set(camera::BOOL,"AcquisitionFrameRateEnable",s);
 		s.eValue=2;
-		hikcam.set_value(hikcamera::ENUM,"ExposureAuto",s);
-		hikcam.set_value(hikcamera::ENUM,"GainAuto",s);
+		hikcam.set(camera::ENUM,"ExposureAuto",s);
+		hikcam.set(camera::ENUM,"GainAuto",s);
+		cam=reinterpret_cast<camera::camera<void*,void*,void*,void*>*>(&hikcam);
 	}
 	else
 		capture.open(cameraId);
 
-	if( !capture.isOpened() && (!hikcam.isopened()||hikcam.start()!=MV_OK) && imageList.empty() )
+	if( !capture.isOpened() && (!cam->isopened()||!cam->start()) && imageList.empty() )
 		return fprintf( stderr, "Could not initialize video (%d) capture\n",cameraId ), -2;
 
 	if( !imageList.empty() )
 		nframes = (int)imageList.size();
 
-	if( capture.isOpened() || hikcam.isopened())
+	if( capture.isOpened() || cam->isopened())
 		printf( "%s", liveCaptureHelp );
 
 	namedWindow( "Image View", 1 );
@@ -520,11 +521,10 @@ int main( int argc, char** argv )
 		}
 		else if( hikcam.isopened() )
 		{
-			hikcamera::FRAME frame;
-			hikcam.grab_frame(&frame,-1);
+			camera::hikcam::FRAME frame=hikcam.grab(-1);
 			Mat view0(frame.stFrameInfo.nHeight,frame.stFrameInfo.nWidth,CV_8UC1,frame.pBufAddr);
 			cvtColor(view0,view,COLOR_BayerBG2BGR);
-			hikcam.free_frame(&frame);
+			hikcam.free(frame);
 		}
 		else if( i < (int)imageList.size() )
 			view = imread(imageList[i], IMREAD_COLOR);
@@ -569,11 +569,11 @@ int main( int argc, char** argv )
 			Size(-1,-1), TermCriteria( TermCriteria::EPS+TermCriteria::COUNT, 30, 0.0001 ));
 
 		if( mode == CAPTURING && found &&
-			(!capture.isOpened()&&!hikcam.isopened() || clock() - prevTimestamp > delay*1e-3*CLOCKS_PER_SEC) )
+			(!capture.isOpened()&&!cam->isopened() || clock() - prevTimestamp > delay*1e-3*CLOCKS_PER_SEC) )
 		{
 			imagePoints.push_back(pointbuf);
 			prevTimestamp = clock();
-			blink = capture.isOpened()||hikcam.isopened();
+			blink = capture.isOpened()||cam->isopened();
 		}
 
 		if(found)
@@ -615,7 +615,7 @@ int main( int argc, char** argv )
 			imshow("Image View", view);
 		}
 
-		char key = (char)waitKey(capture.isOpened()||hikcam.isopened() ? 50 : 500);
+		char key = (char)waitKey(capture.isOpened()||cam->isopened() ? 50 : 500);
 
 		if( key == 27 )
 			break;
@@ -623,7 +623,7 @@ int main( int argc, char** argv )
 		if( key == 'u' && mode == CALIBRATED )
 			undistortImage = !undistortImage;
 
-		if( (capture.isOpened()||hikcam.isopened()) && key == 'g' )
+		if( (capture.isOpened()||cam->isopened()) && key == 'g' )
 		{
 			mode = CAPTURING;
 			imagePoints.clear();
@@ -638,12 +638,12 @@ int main( int argc, char** argv )
 				mode = CALIBRATED;
 			else
 				mode = DETECTION;
-			if( !capture.isOpened()&&!hikcam.isopened() )
+			if( !capture.isOpened()&&!cam->isopened() )
 				break;
 		}
 	}
 
-	if( !capture.isOpened() && !hikcam.isopened() && showUndistorted )
+	if( !capture.isOpened() && !cam->isopened() && showUndistorted )
 	{
 		Mat view, rview, map1, map2;
 		initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat(),

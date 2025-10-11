@@ -16,8 +16,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_NAME}_SOURCE)
 add_executable(${PROJECT_NAME} ${${PROJECT_NAME}_SOURCE})
-target_include_directories(${PROJECT_NAME} PUBLIC ${OpenCV_INCLUDE_DIRS} ../hikcamera)
-target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} hikcamera)
+target_include_directories(${PROJECT_NAME} PUBLIC ${OpenCV_INCLUDE_DIRS} camera)
+target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} camera)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(${PROJECT_NAME} PRIVATE -D_FORTIFY_SOURCE=2)

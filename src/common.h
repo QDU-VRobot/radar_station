@@ -3,30 +3,12 @@
 
 #include <string.h>
 #include <stdio.h>
-#include <tuple>
-#include <vector>
 #include "opencv2/core.hpp"
 #include "opencv2/videoio.hpp"
-#include "hikcamera.h"
 #include "serial.h"
 #define SERIAL_SPEED B115200
 extern "C"
 {
-extern uint8_t mode;
-extern volatile struct serial_info //See RoboMaster doc
-{
-	uint16_t stage_remain_time;
-	uint16_t our_outpost_base_HP;
-	uint16_t oppo_outpost_base_HP;
-	uint8_t robot_id;
-	uint8_t mark_progress:5; //Robot 12347
-	uint8_t game_progress:3;
-	uint8_t more_damage:2;
-	bool damaging:1;
-} serial_info;
-int run(const char* car_engine, const char* armor_engine, const std::tuple<int,int,float>& image_arg, cv::VideoCapture& cap, hikcamera::camera& hikcam, cv::VideoWriter& rec, serial::terminal& sport, bool wait_forever=false, const std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>,float>>>& pose_points=std::make_tuple(cv::Mat(),cv::Mat(),std::vector<std::pair<std::vector<cv::Point2f>,float>>()), const cv::Mat& cam_matrix=cv::Mat(), const cv::Mat& dist_coeffs=cv::Mat(), const cv::Mat& example_img=cv::Mat(), float scale=1);
-void receive(serial::terminal& sport);
-uint8_t send_pos(serial::terminal& sport,const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids,bool* lock=0);
 inline bool file_readable(const char* filename)
 {
 	FILE* test=fopen(filename,"rb");
