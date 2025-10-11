@@ -2,7 +2,7 @@
 #include "hikcamera.h"
 #include "serial.h"
 #include "convert.h"
-#include "infer.h"
+#include "inferer.h"
 #include "message.h"
 #include <signal.h>
 #include <iostream>
@@ -16,7 +16,7 @@
 #include "opencv2/videoio.hpp"
 #include "opencv2/imgproc.hpp"
 #include "opencv2/imgcodecs.hpp"
-#include "deploy/result.hpp"
+#include "infer/trtyolo.hpp"
 struct model_config //Only used for onnx conversion
 {
 	uint32_t builder_flag; //See NvInfer.h
@@ -501,7 +501,7 @@ int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::hikcam& cam, cv::Vi
 				}
 				if((mode&1)==1)
 				{
-					deploy::DetectRes inferred=rainfer.infer(img);
+					trtyolo::DetectRes inferred=rainfer.infer(img);
 					if(inferred.num>0)
 						result=rainfer.track(inferred,std::chrono::duration_cast<std::chrono::milliseconds>(now-old_timestamp));
 				}
@@ -540,7 +540,7 @@ int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::hikcam& cam, cv::Vi
 			}
 			if((mode&1)==1)
 			{
-				deploy::DetectRes inferred=rainfer.infer(img);
+				trtyolo::DetectRes inferred=rainfer.infer(img);
 				if(inferred.num>0)
 					result=rainfer.track(inferred,std::chrono::milliseconds(frame.stFrameInfo.nHostTimeStamp-old_timestamp));
 			}
