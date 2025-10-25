@@ -497,7 +497,7 @@ int main( int argc, char** argv )
 	else
 		capture.open(cameraId);
 
-	if( !capture.isOpened() && (!cam->isopened()||!cam->start()) && imageList.empty() )
+	if( !capture.isOpened() && (!cam->isopened()||cam->start()) && imageList.empty() )
 		return fprintf( stderr, "Could not initialize video (%d) capture\n",cameraId ), -2;
 
 	if( !imageList.empty() )
