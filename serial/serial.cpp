@@ -26,7 +26,7 @@ namespace serial
 	}
 	terminal& terminal::operator=(const terminal& term)
 	{
-		terminal::~terminal();
+		close();
 		if(term.fd>=0)
 			open(term.file,term.flag);
 		else
@@ -35,7 +35,7 @@ namespace serial
 	}
 	int terminal::open(const std::string& filename,int oflag)
 	{
-		terminal::~terminal();
+		close();
 		if(filename.size())
 			file=filename;
 		flag=oflag;
@@ -117,12 +117,15 @@ namespace serial
 			perror(errors[1]);
 		return status;
 	}
+	int terminal::close(void)
+	{
+		int ret=0;
+		if(fd>=0)
+			ret=::close(fd),fd=-1;
+		return ret;
+	}
 	terminal::~terminal()
 	{
-		if(fd>=0)
-		{
-			int tmp=fd;
-			fd=-1,::close(tmp);
-		}
+		close();
 	}
 }

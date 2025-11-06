@@ -59,6 +59,7 @@ namespace camera
 		int free(FRAME& pstFrame);
 		int stop(void);
 		int close(void);
+		int destroy(void);
 		~hikcam();
 	};
 }

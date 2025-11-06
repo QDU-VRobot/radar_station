@@ -37,6 +37,7 @@ namespace serial
 		int write_wCRC16(void* data,size_t count,size_t offset=0);
 		int read_wCRC16(void* data,size_t count,size_t offset=0);
 		int apply_options(int mode=TCSAFLUSH);
+		int close(void);
 		~terminal();
 	};
 }

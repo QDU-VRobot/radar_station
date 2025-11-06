@@ -16,7 +16,7 @@ namespace camera
 	{
 		if(cam.is_opened)
 			throw std::runtime_error("Camera must be closed before copying");
-		hikcam::~hikcam();
+		destroy();
 		if(cam.handle)
 		{
 			CAMERA_INFO info;
@@ -34,7 +34,7 @@ namespace camera
 	int hikcam::open(const CAMERA_INFO* pstDevInfo)
 	{
 		unsigned int nAccessMode = MV_ACCESS_Control;
-		if((!is_opened||(last_error=close())==MV_OK)&&(handle||(last_error=MV_CC_CreateHandle(&handle,pstDevInfo))==MV_OK))
+		if((!is_opened||(last_error=close())==MV_OK)&&(!pstDevInfo&&handle||(destroy(),(last_error=MV_CC_CreateHandle(&handle,pstDevInfo))==MV_OK)))
 			is_opened=(last_error=MV_CC_OpenDevice(handle,nAccessMode))==MV_OK;
 		return last_error;
 	}
@@ -118,10 +118,14 @@ namespace camera
 			is_opened=false;
 		return last_error;
 	}
+	int hikcam::destroy(void)
+	{
+		last_error=handle?MV_CC_DestroyHandle(handle):hikcam::OK;
+		handle=0,is_opened=false;
+		return last_error;
+	}
 	hikcam::~hikcam()
 	{
-		if(handle)
-			last_error=MV_CC_DestroyHandle(handle);
-		handle=0,is_opened=false;
+		destroy();
 	}
 }
