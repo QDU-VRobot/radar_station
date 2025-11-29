@@ -1,0 +1,295 @@
+#include "messenger.h"
+#include "serial.h"
+#include "RM_CRC.h"
+#include <string.h>
+#include <stdio.h>
+#include <algorithm>
+#include <chrono>
+#include <thread>
+#define SERIAL_SPEED B115200
+bool rm::msg::serial_quick_setup(serial::terminal& port, const char* filename)
+{
+	if(filename)
+	{
+		if(port.open(filename)<0)
+			return false;
+	}
+	else if(port.open()<0)
+		return false;
+	port.set_rate(SERIAL_SPEED);
+	port.options.c_cflag&=~(CSIZE|CSTOPB|PARENB);
+	port.options.c_cflag|=(CS8|CREAD|CLOCAL);
+	port.options.c_iflag&=~(BRKINT|ICRNL|INPCK|ISTRIP|IXON);
+	port.options.c_oflag&=~OPOST;
+	port.options.c_lflag&=~(ICANON|ECHO|ISIG);
+	return port.apply_options()==0;
+}
+void rm::msg::judge_callback(void)
+{
+	switch(recv_buf.cmd_id)
+	{
+		case 0x0001:
+			if(recv_buf.game_status.game_progress!=serial_info.game_progress)
+				printf("Game state changed to: %hhu\n",recv_buf.game_status.game_progress);
+			printf("Timer: %hu:%hu\n",recv_buf.game_status.stage_remain_time/60,recv_buf.game_status.stage_remain_time%60);
+			if(recv_buf.game_status.game_progress==4)
+			{
+				if(recv_buf.game_status.stage_remain_time<90&&vulnerated<1||recv_buf.game_status.stage_remain_time<50&&vulnerated<2)
+				{
+					++vulnerated;
+					printf("Double vulnerabilitiy triggered due to timeout\n");
+				}
+			}
+			else vulnerated=0,cmd=0;
+			serial_info.game_progress=recv_buf.game_status.game_progress;
+			if(recv_buf.game_status.game_progress!=5)
+				serial_info.stage_remain_time=recv_buf.game_status.stage_remain_time;
+		break;
+		case 0x0002:
+			switch(recv_buf.winner)
+			{
+				case 0:
+					printf("Result: Draw (or unexpectedly ended)!\n");
+					break;
+				case 1:
+					printf("Result: Red wins!\n");
+					break;
+				case 2:
+					printf("Result: Blue wins!\n");
+					break;
+			}
+			serial_info.stage_remain_time=recv_buf.winner;
+		break;
+		case 0x0003:
+			printf("Robot HP:");
+			for(size_t i=0;i<8;++i)
+				printf(" %hu",recv_buf.game_robot_HP.ally_HP[i]);
+			printf("\n");
+			if(serial_info.game_progress==4&&(recv_buf.game_robot_HP.ally_HP[6]==0&&vulnerated<1||recv_buf.game_robot_HP.ally_HP[7]<=2500&&vulnerated<2))
+			{
+				++vulnerated;
+				printf("Double vulnerabilitiy triggered due to low HP\n");
+			}
+			serial_info.ally_outpost_base_HP=recv_buf.game_robot_HP.ally_HP[6]+recv_buf.game_robot_HP.ally_HP[7];
+		break;
+		case 0x0104:
+			printf("Robot %hhu is %s %hhu time(s)!\n",recv_buf.referee_warning.offending_robot_id,recv_buf.referee_warning.level>=3?"punished":"warned",recv_buf.referee_warning.count);
+		break;
+		case 0x0105:
+			static uint8_t pre_dart_target=0;
+			if(recv_buf.dart_info.dart_target!=pre_dart_target)
+			{
+				printf("Dart target switched\n");
+				pre_dart_target=recv_buf.dart_info.dart_target;
+				if(serial_info.game_progress==4&&serial_info.vulnerability>0)
+				{
+					++vulnerated;
+					printf("Double vulnerabilitiy triggered manually\n");
+				}
+			}
+		break;
+		case 0x0201:
+			printf("Robot ID: %hhu (%s)\n",recv_buf.robot_status.robot_id,recv_buf.robot_status.robot_id/100?"Blue":"Red");
+			serial_info.robot_id=recv_buf.robot_status.robot_id;
+		break;
+		case 0x020C:
+			printf("Marked: ");
+			for(uint8_t i=1;i<=1<<4;i<<=1)
+				printf("%c",serial_info.foe_mark&i?'1':'0');
+			printf(" ");
+			for(uint8_t i=1;i<=1<<4;i<<=1)
+				printf("%c",serial_info.ally_mark&i?'1':'0');
+			printf("\n");
+			serial_info.foe_mark=recv_buf.radar_mark_data.foe_mark;
+			serial_info.ally_mark=recv_buf.radar_mark_data.ally_mark;
+		break;
+		case 0x020E:
+			printf("Double vulnerabilities: %hhu%c\n",recv_buf.radar_info.vulnerability,recv_buf.radar_info.vulnerating?'*':' ');
+			if(serial_info.vulnerability<recv_buf.radar_info.vulnerability)
+				++cmd;
+			serial_info.vulnerability=recv_buf.radar_info.vulnerability,serial_info.vulnerating=recv_buf.radar_info.vulnerating;
+			printf("Encrypt level: %hhu%c\n",recv_buf.radar_info.encrypt_level,recv_buf.radar_info.encrypt_changeable?'*':' ');
+			if(serial_info.encrypt_level<recv_buf.radar_info.encrypt_level)
+				password_ready=false;
+			serial_info.encrypt_level=recv_buf.radar_info.encrypt_level,serial_info.encrypt_changeable=recv_buf.radar_info.encrypt_changeable;
+		break;
+		case 0x0301:
+			printf("Received data from another robot:\ncmd_id: 0x%04hx sender_id: 0x%04hx ",recv_buf.robot_interaction_data.header.data_cmd_id,recv_buf.robot_interaction_data.header.sender_id);
+			#ifndef NDEBUG
+			printf("data:");
+			for(size_t i=sizeof(recv_buf.header)+sizeof(recv_buf.cmd_id)+sizeof(recv_buf.robot_interaction_data.header);i<sizeof(recv_buf.header)+sizeof(recv_buf.cmd_id)+recv_buf.header.data_length;++i)
+				printf(" %02hhx",recv_buf.data[i]);
+			#endif
+			printf("\n");
+			switch(recv_buf.robot_interaction_data.header.data_cmd_id)
+			{
+				case 0x0279: //Receive pos from sentry
+					for(size_t i=0;i<6;++i)
+						if(recv_buf.robot_interaction_data.robot_pos.data[i*2]>0&&recv_buf.robot_interaction_data.robot_pos.data[i*2+1]>0)
+						{
+							count_remaining[i]=0; //Make sure the pos being modified is not used
+							printf("Robot position updated (%zu)\n",i);
+							pos_from_sentry[i].x=recv_buf.robot_interaction_data.robot_pos.data[i*2],pos_from_sentry[i].y=recv_buf.robot_interaction_data.robot_pos.data[i*2+1];
+							count_remaining[i]=10; //Override radar's pos for 1 sec
+						}
+				break;
+			}
+		break;
+		#ifndef NDEBUG
+		default:
+			fprintf(stderr,"Received an unhandled packet, cmd_id: 0x%04hx\n",recv_buf.cmd_id);
+		break;
+		#endif
+	}
+}
+void rm::msg::receive(void)
+{
+	ssize_t state;
+	while(get_fd()>=0) //Loop if not closed manually
+	{
+		while(get_fd()>=0) //Loop unless an error occurred
+		{
+			state=read(&recv_buf.header,1); //Read SOF
+			if(state<0)
+				break;
+			if(recv_buf.header.SOF!=0xA5)
+			{
+				#ifndef NDEBUG
+				fprintf(stderr,"Skipping non-header data: %02hhx\n",recv_buf.header.SOF);
+				#endif
+				continue;
+			}
+			state=read_wCRC8(&recv_buf.header,sizeof(recv_buf.header),1); //Read the rest of header
+			if(state!=0&&state<static_cast<ssize_t>(sizeof(recv_buf.header)-1)) //Read failed
+				break;
+			if(recv_buf.header.data_length>MAX_BUF-(sizeof(recv_buf.header)+sizeof(recv_buf.cmd_id)+sizeof(frame_tail)))
+				recv_buf.header.data_length=0; //Prevent overflow
+			if(state||!recv_buf.header.data_length)
+			{
+				read(&recv_buf.data,sizeof(recv_buf.cmd_id)+recv_buf.header.data_length+sizeof(frame_tail)); //Skip wrong data
+				continue;
+			}
+			#ifndef NDEBUG
+			fprintf(stderr,"Received header:");
+			for(size_t i=0;i<sizeof(recv_buf.header);++i)
+				fprintf(stderr," %02hhx",recv_buf.data[i]);
+			fprintf(stderr,"\n");
+			#endif
+			state=read_wCRC16(&recv_buf.data,sizeof(recv_buf.header)+sizeof(recv_buf.cmd_id)+recv_buf.header.data_length+sizeof(frame_tail),sizeof(recv_buf.header));
+			if(state!=0&&state<static_cast<ssize_t>(sizeof(recv_buf.cmd_id)+recv_buf.header.data_length+sizeof(frame_tail)))
+				break;
+			if(state)
+			{
+				#ifndef NDEBUG
+				fprintf(stderr,"Received a wrong packet, cmd_id: 0x%04hx\n",recv_buf.cmd_id);
+				#endif
+				continue;
+			}
+			judge_callback();
+		}
+		if(get_fd()>=0)
+		{
+			fprintf(stderr,"Fatal error detected, re-enabling serial port\n");
+			while(!serial_quick_setup(*this))
+				std::this_thread::sleep_for(std::chrono::milliseconds(250));
+		}
+	}
+}
+bool rm::msg::judge_send(uint16_t cmd_id, uint16_t data_length, const void* data)
+{
+	union frame buf={{{0xA5,data_length,++seq},cmd_id}};
+	const size_t buf_len=sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);
+	Append_CRC8_Check_Sum(reinterpret_cast<uint8_t*>(&buf.header),sizeof(buf.header));
+	memcpy(buf.data+sizeof(buf.header)+sizeof(buf.cmd_id),data,data_length);
+	#ifndef NDEBUG
+	fprintf(stderr,"Sending data: ");
+	for(size_t i=0;i<buf_len;++i)
+		fprintf(stderr,"%02hhx ",buf.data[i]);
+	#endif
+	return write_wCRC16(&buf.data,buf_len)==static_cast<ssize_t>(buf_len);
+}
+uint8_t rm::msg::poll(void)
+{
+	uint8_t ret=0;
+	while(get_fd()>=0&&!serial_info.robot_id)
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	while(get_fd()>=0)
+	{
+		uint8_t team=serial_info.robot_id/100;
+		union robot_pos pos={.data={0}};
+		ret=0;
+		if(timer::now()>timestamp[0])
+		{
+			size_t count=0;
+			for(size_t i=0;i<sizeof(count_remaining)/sizeof(uint8_t);++i)
+				if(count_remaining[i]&&--count_remaining[i])
+					pos.data[i*2]=pos_from_sentry[i].x,pos.data[i*2+1]=pos_from_sentry[i].y,++count; //Override pos with sentry's
+			for(size_t i=0,id;i<pos_from_camera.second.size();++i)
+				if(pos_from_camera.second[i]!=-1&&(id=std::find(robot_classes[team].begin(),robot_classes[team].end(),pos_from_camera.second[i])-robot_classes[team].begin())<6&&!count_remaining[id])
+				{
+					pos.data[id*2]=pos_from_camera.first[i].x,pos.data[id*2+1]=pos_from_camera.first[i].y,++count;
+					#ifndef NDEBUG
+					fprintf(stderr,"Robot %zu: (%.2f,%.2f)\n",id,pos_from_camera.first[i].x,pos_from_camera.first[i].y);
+					#endif
+				}
+			if(count>0)
+			{
+				//Send pos
+				union map_robot buf;
+				for(size_t i=0;i<sizeof(union robot_pos)/sizeof(float);++i)
+					buf.data[i]=MAX(pos.data[i],0)*100; //Convert unit (m->cm) and ensure not overflow
+				if(judge_send(0x0305,sizeof(union map_robot),&buf))
+				{
+					#ifndef NDEBUG
+					fprintf(stderr,"Sent data to server\n");
+					#endif
+					timestamp[0]+=std::chrono::milliseconds(100);
+					ret|=1; //Complete, return bit 0 set to 1
+				}
+			}
+		}
+		if(timer::now()>timestamp[1])
+		{
+			if(serial_info.game_progress==4&&(serial_info.vulnerability>0||serial_info.encrypt_changeable||password_ready))
+			{
+				//Send cmd
+				struct robot_interaction_data buf={{0x0121,serial_info.robot_id,0x8080},{{MIN(vulnerated,cmd)}}};
+				if(buf.cmd.password_cmd=(password_ready?2:0))
+					memcpy(&buf.cmd.password,&guessed_password,sizeof(guessed_password));
+				else if(buf.cmd.password_cmd=serial_info.encrypt_changeable)
+				{
+					//buf.cmd.password=generate_password();
+				}
+				if(judge_send(0x0301,sizeof(buf.header)+sizeof(buf.cmd),&buf))
+				{
+					#ifndef NDEBUG
+					fprintf(stderr,"Sent cmd: %hhu %hhu\n",buf.cmd.radar_cmd,buf.cmd.password_cmd);
+					#endif
+					if(buf.cmd.password_cmd)
+					{
+						fprintf(stderr,"%s password: ",password_ready==2?"Guessed":"New");
+						for(size_t i=0;i<sizeof(buf.cmd.password)/sizeof(uint8_t);++i)
+							fprintf(stderr,"%c",buf.cmd.password[i]);
+						fprintf(stderr,"\n");
+					}
+					timestamp[1]+=std::chrono::milliseconds(100);
+					ret|=2; //Complete, return bit 0 set to 1
+				}
+			}
+		}
+		if(timer::now()>timestamp[2])
+		{
+			struct robot_interaction_data buf={{0x0297,serial_info.robot_id,team*100+7}};
+			memcpy(&buf.robot_pos,&pos,sizeof(pos));
+			if(judge_send(0x0301,sizeof(buf.header)+sizeof(buf.robot_pos),&buf))
+			{
+				#ifndef NDEBUG
+				fprintf(stderr,"Sent data to robot\n");
+				#endif
+				timestamp[2]+=std::chrono::milliseconds(50);
+				ret|=4; //Complete, return bit 0 set to 1
+			}
+		}
+	}
+	return ret;
+}

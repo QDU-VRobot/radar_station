@@ -7,7 +7,7 @@
 #include <string>
 namespace serial
 {
-	//Provide unified serial interface for different systems
+	//TODO: Provide unified serial interface for different OSes
 	class terminal
 	{
 		int fd;
@@ -30,15 +30,15 @@ namespace serial
 		}
 		int open(const std::string& filename=std::string(),int oflag=O_RDWR|O_NOCTTY);
 		int set_rate(speed_t speed);
-		int write(const void* data,size_t count);
-		int read(void* data,size_t count);
-		int write_wCRC8(void* data,size_t count,size_t offset=0);
-		int read_wCRC8(void* data,size_t count,size_t offset=0);
-		int write_wCRC16(void* data,size_t count,size_t offset=0);
-		int read_wCRC16(void* data,size_t count,size_t offset=0);
+		ssize_t write(const void* data,size_t count);
+		ssize_t read(void* data,size_t count);
+		ssize_t write_wCRC8(void* data,size_t count,size_t offset=0);
+		ssize_t read_wCRC8(void* data,size_t count,size_t offset=0);
+		ssize_t write_wCRC16(void* data,size_t count,size_t offset=0);
+		ssize_t read_wCRC16(void* data,size_t count,size_t offset=0);
 		int apply_options(int mode=TCSAFLUSH);
 		int close(void);
-		~terminal();
+		virtual ~terminal();
 	};
 }
 

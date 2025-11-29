@@ -5,9 +5,7 @@
 #include <stdio.h>
 #include "opencv2/core.hpp"
 #include "opencv2/videoio.hpp"
-#include "serial.h"
-#define SERIAL_SPEED B115200
-extern "C"
+extern "C" //Just for shorter symbols :)
 {
 inline bool file_readable(const char* filename)
 {
@@ -30,23 +28,6 @@ inline size_t getsavename(char* savename, const char* pathname, const char* save
 	strncpy(savename,pathname,savelen);
 	strcpy(savename+savelen-extlen,saveext);
 	return 0;
-}
-inline bool open_serial(serial::terminal& port, const char* filename=0)
-{
-	if(filename)
-	{
-		if(port.open(filename)<0)
-			return false;
-	}
-	else if(port.open()<0)
-		return false;
-	port.set_rate(SERIAL_SPEED);
-	port.options.c_cflag&=~(CSIZE|CSTOPB|PARENB);
-	port.options.c_cflag|=(CS8|CREAD|CLOCAL);
-	port.options.c_iflag&=~(BRKINT|ICRNL|INPCK|ISTRIP|IXON);
-	port.options.c_oflag&=~OPOST;
-	port.options.c_lflag&=~(ICANON|ECHO|ISIG);
-	return port.apply_options()==0;
 }
 inline cv::Mat calculateCameraMatrix(cv::Size imgsize, double fov) //Returns an ideal camera matrix with a given FOV
 {

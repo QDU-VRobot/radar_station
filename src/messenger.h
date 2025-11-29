@@ -1,5 +1,5 @@
-#ifndef _MESSAGE_H_
-#define _MESSAGE_H_
+#ifndef _MESSENGER_H_
+#define _MESSENGER_H_
 
 #include "serial.h"
 #include <chrono>
@@ -26,8 +26,7 @@ namespace rm
     };
     struct game_robot_HP
     {
-        uint16_t red_HP[8]; //123457OB
-        uint16_t blue_HP[8];
+        uint16_t ally_HP[8]; //123457OB
     };
     struct referee_warning
     {
@@ -46,6 +45,7 @@ namespace rm
     struct robot_status
     {
         uint8_t robot_id;
+        //Unused below
         uint8_t robot_level;
         uint16_t current_HP;
         uint16_t maximum_HP;
@@ -56,11 +56,19 @@ namespace rm
         uint8_t power_management_chassis_output : 1;
         uint8_t power_management_shooter_output : 1;
     };
-    struct robot_interaction_data_header
+    struct radar_mark_data
     {
-        uint16_t data_cmd_id;
-        uint16_t sender_id;
-        uint16_t receiver_id;
+        uint8_t foe_mark : 5;
+        uint8_t ally_mark : 5;
+        uint8_t reserved : 6;
+    };
+    struct radar_info
+    {
+        uint8_t vulnerability : 2;
+        uint8_t vulnerating : 1;
+        uint8_t encrypt_level : 2;
+        uint8_t encrypt_changeable : 1;
+        uint8_t reserved : 2;
     };
     union map_robot
     {
@@ -81,6 +89,7 @@ namespace rm
         };
         uint16_t data[12];
     };
+    //Communicate with sentry
     union robot_pos
     {
         struct
@@ -100,6 +109,25 @@ namespace rm
         };
         float data[12];
     };
+    struct robot_interaction_data
+    {
+        struct
+        {
+            uint16_t data_cmd_id;
+            uint16_t sender_id;
+            uint16_t receiver_id;
+        } header;
+        union
+        {
+            struct
+            {
+                uint8_t radar_cmd;
+                uint8_t password_cmd;
+                uint8_t password[6];
+            } cmd;
+            union robot_pos robot_pos;
+        };
+    };
     union frame
     {
         struct
@@ -114,17 +142,9 @@ namespace rm
                 struct referee_warning referee_warning;
                 struct dart_info dart_info;
                 struct robot_status robot_status;
-                uint8_t mark_progress;
-                uint8_t radar_info;
-                struct
-                {
-                    struct robot_interaction_data_header rheader;
-                    union
-                    {
-                        uint8_t radar_cmd;
-                        union robot_pos robot_pos;
-                    };
-                };
+                struct radar_mark_data radar_mark_data;
+                struct radar_info radar_info;
+                struct robot_interaction_data robot_interaction_data;
                 union map_robot map_robot;
             };
         };
@@ -135,32 +155,40 @@ namespace rm
     struct serial_info //See RoboMaster doc
     {
         uint16_t stage_remain_time;
-        uint16_t our_outpost_base_HP;
-        uint16_t oppo_outpost_base_HP;
+        uint16_t ally_outpost_base_HP;
+        uint16_t foe_outpost_base_HP;
         uint8_t robot_id;
-        uint8_t mark_progress:5; //Robot 12347
         uint8_t game_progress:3;
-        uint8_t more_damage:2;
-        bool damaging:1;
+        uint8_t foe_mark:5;
+        uint8_t ally_mark:5;
+        uint8_t vulnerability:2;
+        bool vulnerating:1;
+        uint8_t encrypt_level:2;
+        bool encrypt_changeable:1;
     };
-    class msg
+    class msg: public serial::terminal
     {
-        serial::terminal& sport;
-        union frame buf;
-        std::chrono::steady_clock::time_point last_time;
+        union frame recv_buf;
+        std::chrono::steady_clock::time_point timestamp[3];
         volatile uint8_t cmd;
-        volatile bool locked; //Simple mutex if not too frequent
         uint8_t seq;
+        void judge_callback(void);
     public:
+        using timer=std::chrono::steady_clock;
         static std::vector<std::vector<uint8_t>> robot_classes; //HERO=0,ENGINEER,INFANTRY3,INFANTRY4,INFANTRY5,SENTRY
-        static const union frame buf_temp;
         volatile struct serial_info serial_info;
+        std::pair<std::vector<cv::Point2f>, std::vector<uint8_t>> pos_from_camera;
         volatile cv::Point2f pos_from_sentry[6];
         volatile uint8_t count_remaining[6]; //cache for a while
-        volatile uint8_t damaged; //Double vulnerabilitiy trigger
-        msg(serial::terminal& s):sport(s),last_time(std::chrono::steady_clock::now()),cmd(0),seq(0),locked(false),count_remaining({0}),damaged(0){}
+        uint8_t guessed_password[6];
+        volatile uint8_t vulnerated; //Double vulnerability trigger
+        bool password_ready;
+        msg():timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),count_remaining{0},guessed_password{0},vulnerated(0),password_ready(false){}
+        msg(serial::terminal&& s):serial::terminal(s),timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),count_remaining{0},guessed_password{0},vulnerated(0),password_ready(false){}
+        static bool serial_quick_setup(serial::terminal& port, const char* filename=0);
         void receive(void);
-        uint8_t send_pos(const std::vector<cv::Point2f>& center_points,const std::vector<uint8_t>& ids);
+        bool judge_send(uint16_t cmd_id, uint16_t data_length, const void* data);
+        uint8_t poll(void);
     };
 }
 

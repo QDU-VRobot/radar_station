@@ -1,9 +1,8 @@
 #include "common.h"
 #include "hikcamera.h"
-#include "serial.h"
 #include "convert.h"
 #include "inferer.h"
-#include "message.h"
+#include "messenger.h"
 #include <signal.h>
 #include <iostream>
 #include <thread>
@@ -370,7 +369,6 @@ static std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>
 }
 static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const std::map<int, std::pair<uint8_t,float>>>& result, const cv::Mat& m1, const cv::Mat& m2, const std::vector<std::pair<std::vector<cv::Point2f>,float>>& contours, cv::VideoWriter& rec, rm::msg& msger, cv::Mat&& example_img, float scale, unsigned short latency=0) //Display, send to judge or record
 {
-	static bool serial_busy=false; //Prevent infinite thread creation
 	std::vector<cv::Point2f> center_points; //Mark to the minimap and send to server
 	if((mode&1)==1&&result.first.size()>0)
 	{
@@ -400,8 +398,8 @@ static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const
 				ids.push_back(-1);
 			std::cout<<std::endl;
 		}
-		if((mode&11)==11&&!serial_busy&&msger.serial_info.robot_id)
-			serial_busy=true,std::thread(&rm::msg::send_pos,&msger,center_points,ids).detach(); //Use a new thread for a blocking task
+		if((mode&8)==8)
+			msger.pos_from_camera=std::make_pair(center_points,ids);
 	}
 	if(!img.empty()&&((mode&4)==4||(mode&48)&&rec.isOpened()))
 	{
@@ -433,13 +431,18 @@ static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const
 			if(msger.serial_info.robot_id)
 				cv::putText(img,std::string("Team: ")+(msger.serial_info.robot_id/100?"Blue":"Red"),cv::Point(350,30),0,1,cv::Scalar(0,255,0),2);
 			{
-				std::string marked("Marked: ");
+				std::string marked("Ally: ");
 				for(uint8_t i=1;i<=1<<4;i<<=1)
-					marked+=msger.serial_info.mark_progress&i?'1':'0';
-				cv::putText(img,marked,cv::Point(img.cols-460,img.rows-10),0,1,cv::Scalar(0,255,0),2);
+					marked+=msger.serial_info.foe_mark&i?'1':'0';
+				cv::putText(img,marked,cv::Point(img.cols-415,img.rows-40),0,1,cv::Scalar(0,255,0),2);
+				marked="Foe: ";
+				for(uint8_t i=1;i<=1<<4;i<<=1)
+					marked+=msger.serial_info.ally_mark&i?'1':'0';
+				cv::putText(img,marked,cv::Point(img.cols-420,img.rows-10),0,1,cv::Scalar(0,255,0),2);
 			}
-			cv::putText(img,std::string("HP: ")+std::to_string(msger.serial_info.our_outpost_base_HP)+'/'+std::to_string(msger.serial_info.oppo_outpost_base_HP),cv::Point(5,img.rows-10),0,1,cv::Scalar(0,255,0),2);
-			cv::putText(img,std::string("Damages: ")+std::to_string(msger.serial_info.more_damage)+(msger.serial_info.damaging?'*':' '),cv::Point(img.cols-210,img.rows-10),0,1,cv::Scalar(0,255,0),2);
+			cv::putText(img,std::string("HP: ")+std::to_string(msger.serial_info.ally_outpost_base_HP),cv::Point(5,img.rows-10),0,1,cv::Scalar(0,255,0),2);
+			cv::putText(img,std::string("Encrypt: ")+std::to_string(msger.serial_info.encrypt_level)+(msger.password_ready?'*':' '),cv::Point(img.cols-185,img.rows-40),0,1,cv::Scalar(0,255,0),2);
+			cv::putText(img,std::string("Damages: ")+std::to_string(msger.serial_info.vulnerability)+(msger.serial_info.vulnerating?'*':' '),cv::Point(img.cols-210,img.rows-10),0,1,cv::Scalar(0,255,0),2);
 		}
 		for(auto it=result.first.begin();it!=result.first.end();++it)
 		{
@@ -630,16 +633,18 @@ int main(int argc, char** argv)
 	std::cout<<" FPS: "<<video_config.fps<<" Exposure time: "<<video_config.exposure_time<<" Gain: "<<video_config.gain<<std::endl;
 	std::cout<<"Camera matrix:\n"<<cam_matrix<<"\nDistortion coefficients:\n"<<dist_coeffs<<std::endl;
 	//Part 3 Open serial port
-	serial::terminal sport; //Communicate with judge
-	rm::msg msger(sport);
+	rm::msg msger; //Communicate with judge
 	if((mode&8)==8)
-		if(open_serial(sport,args.get<std::string>("s").c_str()))
+		if(rm::msg::serial_quick_setup(msger,args.get<std::string>("s").c_str()))
+		{
 			std::thread(&rm::msg::receive,&msger).detach();
-	else
-	{
-		std::cerr<<"Serial port is not available"<<std::endl;
-		mode&=~8;
-	}
+			std::thread(&rm::msg::poll,&msger).detach(); //Use a new thread for a blocking task
+		}
+		else
+		{
+			std::cerr<<"Serial port is not available"<<std::endl;
+			mode&=~8;
+		}
 	//Part 4.1 Open video
 	cv::VideoCapture cap;
 	camera::hikcam cam;

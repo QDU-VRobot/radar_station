@@ -60,14 +60,14 @@ namespace serial
 			perror(errors[3]);
 		return status;
 	}
-	int terminal::write(const void* data,size_t count)
+	ssize_t terminal::write(const void* data,size_t count)
 	{
 		return ::write(fd,data,count);
 	}
-	int terminal::read(void* data,size_t count)
+	ssize_t terminal::read(void* data,size_t count)
 	{
 		size_t ncount=0;
-		for(int status;ncount<count;ncount+=status)
+		for(ssize_t status;ncount<count;ncount+=status)
 			if((status=::read(fd,data,count))<=0)
 			{
 				if(status<0)
@@ -78,12 +78,12 @@ namespace serial
 			}
 		return ncount;
 	}
-	int terminal::write_wCRC8(void* data,size_t count,size_t offset)
+	ssize_t terminal::write_wCRC8(void* data,size_t count,size_t offset)
 	{
 		Append_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(data),count);
 		return write(reinterpret_cast<unsigned char*>(data)+offset,count-offset);
 	}
-	int terminal::read_wCRC8(void* data,size_t count,size_t offset)
+	ssize_t terminal::read_wCRC8(void* data,size_t count,size_t offset)
 	{
 		int status=read(reinterpret_cast<unsigned char*>(data)+offset,count-offset);
 		if(status<static_cast<int>(count-offset))
@@ -94,12 +94,12 @@ namespace serial
 			fputs(errors[5],stderr);
 		return status;
 	}
-	int terminal::write_wCRC16(void* data,size_t count,size_t offset)
+	ssize_t terminal::write_wCRC16(void* data,size_t count,size_t offset)
 	{
 		Append_CRC16_Check_Sum(reinterpret_cast<unsigned char*>(data),count);
 		return write(reinterpret_cast<unsigned char*>(data)+offset,count-offset);
 	}
-	int terminal::read_wCRC16(void* data,size_t count,size_t offset)
+	ssize_t terminal::read_wCRC16(void* data,size_t count,size_t offset)
 	{
 		int status=read(reinterpret_cast<unsigned char*>(data)+offset,count-offset);
 		if(status<static_cast<int>(count-offset))

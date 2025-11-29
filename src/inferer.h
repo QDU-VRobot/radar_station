@@ -1,5 +1,5 @@
-#ifndef _INFER_H_
-#define _INFER_H_
+#ifndef _INFERER_H_
+#define _INFERER_H_
 
 #include <map>
 #include <utility>

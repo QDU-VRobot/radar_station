@@ -1,4 +1,4 @@
-# Radar (station) 2025
+# Radar (station)
 Detect robots by their cars and armors with monocular camera and YOLO  
 Designed for and tested on Linux (Serial needs to be rewritten for Windows)
 
@@ -37,7 +37,7 @@ graph TB
 5. Check executables and libraries in *build* folder
 6. Use the calibration executable to generate camera config (`build/bin/calibration`)
 7. Add more parameters by checking help output (`build/bin/radar --help`)
-8. Set up camera and serial port (based on RoboMaster serial protocol V1.8.0)
+8. Set up camera and serial port (based on RoboMaster 2026 serial protocol V1.0.0)
 9. Mark points on first startup (first contour for PnP and other contours for highlands)
 10. Check result
 
@@ -54,7 +54,7 @@ graph TB
 The ONNX files are built by [trtyolo](https://github.com/laugh12321/TensorRT-YOLO/blob/main/docs/cn/model_export.md) with plugins and dynamic batch
 
 ## Result:
-In RoboMaster 2025, this program vulnerate opponents for 338.1s per game in average
+In RoboMaster 2025, this program vulnerated opponents for 338.1s per game in average
 
 ## Special thanks:
 Datasets provided by [Taurus](https://github.com/SCAU-RM-NAV/RM2023_Radar_Dataset)
@@ -65,3 +65,4 @@ Datasets provided by [Taurus](https://github.com/SCAU-RM-NAV/RM2023_Radar_Datase
 * [ ] Adjust vulnerabilitiy's trigger
 * [ ] Cooperate with a LiDAR
 * [ ] Behavior-based guess
+* [ ] **NEW** Radio decrypt
