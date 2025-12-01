@@ -172,22 +172,22 @@ namespace rm
         std::chrono::steady_clock::time_point timestamp[3];
         volatile uint8_t cmd;
         uint8_t seq;
-        void judge_callback(void);
+        void referee_callback(void);
     public:
         using timer=std::chrono::steady_clock;
         static std::vector<std::vector<uint8_t>> robot_classes; //HERO=0,ENGINEER,INFANTRY3,INFANTRY4,INFANTRY5,SENTRY
         volatile struct serial_info serial_info;
         std::pair<std::vector<cv::Point2f>, std::vector<uint8_t>> pos_from_camera;
         volatile cv::Point2f pos_from_sentry[6];
-        volatile uint8_t count_remaining[6]; //cache for a while
+        volatile uint8_t pos_retries[6]; //cache for a while
         uint8_t guessed_password[6];
+        volatile uint8_t password_retries;
         volatile uint8_t vulnerated; //Double vulnerability trigger
-        bool password_ready;
-        msg():timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),count_remaining{0},guessed_password{0},vulnerated(0),password_ready(false){}
-        msg(serial::terminal&& s):serial::terminal(s),timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),count_remaining{0},guessed_password{0},vulnerated(0),password_ready(false){}
+        msg():timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),pos_retries{0},guessed_password{0},vulnerated(0),password_retries(0){}
+        msg(serial::terminal&& s):serial::terminal(s),timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),pos_retries{0},guessed_password{0},vulnerated(0),password_retries(0){}
         static bool serial_quick_setup(serial::terminal& port, const char* filename=0);
         void receive(void);
-        bool judge_send(uint16_t cmd_id, uint16_t data_length, const void* data);
+        bool referee_send(uint16_t cmd_id, uint16_t data_length, const void* data);
         uint8_t poll(void);
     };
 }

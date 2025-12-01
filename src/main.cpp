@@ -367,7 +367,7 @@ static std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>
 	}
 	return std::make_tuple(rvec,tvec,contours);
 }
-static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const std::map<int, std::pair<uint8_t,float>>>& result, const cv::Mat& m1, const cv::Mat& m2, const std::vector<std::pair<std::vector<cv::Point2f>,float>>& contours, cv::VideoWriter& rec, rm::msg& msger, cv::Mat&& example_img, float scale, unsigned short latency=0) //Display, send to judge or record
+static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const std::map<int, std::pair<uint8_t,float>>>& result, const cv::Mat& m1, const cv::Mat& m2, const std::vector<std::pair<std::vector<cv::Point2f>,float>>& contours, cv::VideoWriter& rec, rm::msg& msger, cv::Mat&& example_img, float scale, unsigned short latency=0) //Display, send to referee or record
 {
 	std::vector<cv::Point2f> center_points; //Mark to the minimap and send to server
 	if((mode&1)==1&&result.first.size()>0)
@@ -441,7 +441,7 @@ static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const
 				cv::putText(img,marked,cv::Point(img.cols-420,img.rows-10),0,1,cv::Scalar(0,255,0),2);
 			}
 			cv::putText(img,std::string("HP: ")+std::to_string(msger.serial_info.ally_outpost_base_HP),cv::Point(5,img.rows-10),0,1,cv::Scalar(0,255,0),2);
-			cv::putText(img,std::string("Encrypt: ")+std::to_string(msger.serial_info.encrypt_level)+(msger.password_ready?'*':' '),cv::Point(img.cols-185,img.rows-40),0,1,cv::Scalar(0,255,0),2);
+			cv::putText(img,std::string("Encrypt: ")+std::to_string(msger.serial_info.encrypt_level)+(msger.password_retries>0?'*':' '),cv::Point(img.cols-185,img.rows-40),0,1,cv::Scalar(0,255,0),2);
 			cv::putText(img,std::string("Damages: ")+std::to_string(msger.serial_info.vulnerability)+(msger.serial_info.vulnerating?'*':' '),cv::Point(img.cols-210,img.rows-10),0,1,cv::Scalar(0,255,0),2);
 		}
 		for(auto it=result.first.begin();it!=result.first.end();++it)
@@ -633,7 +633,7 @@ int main(int argc, char** argv)
 	std::cout<<" FPS: "<<video_config.fps<<" Exposure time: "<<video_config.exposure_time<<" Gain: "<<video_config.gain<<std::endl;
 	std::cout<<"Camera matrix:\n"<<cam_matrix<<"\nDistortion coefficients:\n"<<dist_coeffs<<std::endl;
 	//Part 3 Open serial port
-	rm::msg msger; //Communicate with judge
+	rm::msg msger; //Communicate with referee
 	if((mode&8)==8)
 		if(rm::msg::serial_quick_setup(msger,args.get<std::string>("s").c_str()))
 		{

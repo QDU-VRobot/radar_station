@@ -24,7 +24,7 @@ bool rm::msg::serial_quick_setup(serial::terminal& port, const char* filename)
 	port.options.c_lflag&=~(ICANON|ECHO|ISIG);
 	return port.apply_options()==0;
 }
-void rm::msg::judge_callback(void)
+void rm::msg::referee_callback(void)
 {
 	switch(recv_buf.cmd_id)
 	{
@@ -110,7 +110,7 @@ void rm::msg::judge_callback(void)
 			serial_info.vulnerability=recv_buf.radar_info.vulnerability,serial_info.vulnerating=recv_buf.radar_info.vulnerating;
 			printf("Encrypt level: %hhu%c\n",recv_buf.radar_info.encrypt_level,recv_buf.radar_info.encrypt_changeable?'*':' ');
 			if(serial_info.encrypt_level<recv_buf.radar_info.encrypt_level)
-				password_ready=false;
+				password_retries=0;
 			serial_info.encrypt_level=recv_buf.radar_info.encrypt_level,serial_info.encrypt_changeable=recv_buf.radar_info.encrypt_changeable;
 		break;
 		case 0x0301:
@@ -127,10 +127,10 @@ void rm::msg::judge_callback(void)
 					for(size_t i=0;i<6;++i)
 						if(recv_buf.robot_interaction_data.robot_pos.data[i*2]>0&&recv_buf.robot_interaction_data.robot_pos.data[i*2+1]>0)
 						{
-							count_remaining[i]=0; //Make sure the pos being modified is not used
+							pos_retries[i]=0; //Make sure the pos being modified is not used
 							printf("Robot position updated (%zu)\n",i);
 							pos_from_sentry[i].x=recv_buf.robot_interaction_data.robot_pos.data[i*2],pos_from_sentry[i].y=recv_buf.robot_interaction_data.robot_pos.data[i*2+1];
-							count_remaining[i]=10; //Override radar's pos for 1 sec
+							pos_retries[i]=10; //Override radar's pos for 1 sec
 						}
 				break;
 			}
@@ -185,7 +185,7 @@ void rm::msg::receive(void)
 				#endif
 				continue;
 			}
-			judge_callback();
+			referee_callback();
 		}
 		if(get_fd()>=0)
 		{
@@ -195,7 +195,7 @@ void rm::msg::receive(void)
 		}
 	}
 }
-bool rm::msg::judge_send(uint16_t cmd_id, uint16_t data_length, const void* data)
+bool rm::msg::referee_send(uint16_t cmd_id, uint16_t data_length, const void* data)
 {
 	union frame buf={{{0xA5,data_length,++seq},cmd_id}};
 	const size_t buf_len=sizeof(buf.header)+sizeof(buf.cmd_id)+buf.header.data_length+sizeof(frame_tail);
@@ -221,11 +221,11 @@ uint8_t rm::msg::poll(void)
 		if(timer::now()>timestamp[0])
 		{
 			size_t count=0;
-			for(size_t i=0;i<sizeof(count_remaining)/sizeof(uint8_t);++i)
-				if(count_remaining[i]&&--count_remaining[i])
+			for(size_t i=0;i<sizeof(pos_retries)/sizeof(uint8_t);++i)
+				if(pos_retries[i]&&--pos_retries[i])
 					pos.data[i*2]=pos_from_sentry[i].x,pos.data[i*2+1]=pos_from_sentry[i].y,++count; //Override pos with sentry's
 			for(size_t i=0,id;i<pos_from_camera.second.size();++i)
-				if(pos_from_camera.second[i]!=-1&&(id=std::find(robot_classes[team].begin(),robot_classes[team].end(),pos_from_camera.second[i])-robot_classes[team].begin())<6&&!count_remaining[id])
+				if(pos_from_camera.second[i]!=-1&&(id=std::find(robot_classes[team].begin(),robot_classes[team].end(),pos_from_camera.second[i])-robot_classes[team].begin())<6&&!pos_retries[id])
 				{
 					pos.data[id*2]=pos_from_camera.first[i].x,pos.data[id*2+1]=pos_from_camera.first[i].y,++count;
 					#ifndef NDEBUG
@@ -238,7 +238,7 @@ uint8_t rm::msg::poll(void)
 				union map_robot buf;
 				for(size_t i=0;i<sizeof(union robot_pos)/sizeof(float);++i)
 					buf.data[i]=MAX(pos.data[i],0)*100; //Convert unit (m->cm) and ensure not overflow
-				if(judge_send(0x0305,sizeof(union map_robot),&buf))
+				if(referee_send(0x0305,sizeof(union map_robot),&buf))
 				{
 					#ifndef NDEBUG
 					fprintf(stderr,"Sent data to server\n");
@@ -250,24 +250,24 @@ uint8_t rm::msg::poll(void)
 		}
 		if(timer::now()>timestamp[1])
 		{
-			if(serial_info.game_progress==4&&(serial_info.vulnerability>0||serial_info.encrypt_changeable||password_ready))
+			if(serial_info.game_progress==4&&(serial_info.vulnerability>0||serial_info.encrypt_changeable||password_retries>0))
 			{
 				//Send cmd
 				struct robot_interaction_data buf={{0x0121,serial_info.robot_id,0x8080},{{MIN(vulnerated,cmd)}}};
-				if(buf.cmd.password_cmd=(password_ready?2:0))
-					memcpy(&buf.cmd.password,&guessed_password,sizeof(guessed_password));
+				if(buf.cmd.password_cmd=(password_retries>0?2:0))
+					memcpy(&buf.cmd.password,&guessed_password,sizeof(guessed_password)),--password_retries;
 				else if(buf.cmd.password_cmd=serial_info.encrypt_changeable)
 				{
 					//buf.cmd.password=generate_password();
 				}
-				if(judge_send(0x0301,sizeof(buf.header)+sizeof(buf.cmd),&buf))
+				if(referee_send(0x0301,sizeof(buf.header)+sizeof(buf.cmd),&buf))
 				{
 					#ifndef NDEBUG
 					fprintf(stderr,"Sent cmd: %hhu %hhu\n",buf.cmd.radar_cmd,buf.cmd.password_cmd);
 					#endif
 					if(buf.cmd.password_cmd)
 					{
-						fprintf(stderr,"%s password: ",password_ready==2?"Guessed":"New");
+						fprintf(stderr,"%s password: ",buf.cmd.password_cmd==2?"Guessed":"New");
 						for(size_t i=0;i<sizeof(buf.cmd.password)/sizeof(uint8_t);++i)
 							fprintf(stderr,"%c",buf.cmd.password[i]);
 						fprintf(stderr,"\n");
@@ -281,7 +281,7 @@ uint8_t rm::msg::poll(void)
 		{
 			struct robot_interaction_data buf={{0x0297,serial_info.robot_id,team*100+7}};
 			memcpy(&buf.robot_pos,&pos,sizeof(pos));
-			if(judge_send(0x0301,sizeof(buf.header)+sizeof(buf.robot_pos),&buf))
+			if(referee_send(0x0301,sizeof(buf.header)+sizeof(buf.robot_pos),&buf))
 			{
 				#ifndef NDEBUG
 				fprintf(stderr,"Sent data to robot\n");
