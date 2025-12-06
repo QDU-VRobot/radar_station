@@ -17,7 +17,7 @@ find_package(OpenCV REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
-add_compile_options(-pipe -mcmodel=medium -Wall -march=native)
+add_compile_options(-pipe -Wall -march=native)
 
 add_subdirectory(trt)
 add_subdirectory(bytetrack)
