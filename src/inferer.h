@@ -11,6 +11,17 @@
 #include "infer/trtyolo.hpp"
 #include "BYTETracker.h"
 #include "STrack.h"
+struct model_config //Only used for onnx conversion
+{
+    uint32_t builder_flag; //See NvInfer.h
+    const std::string car_file; //ONNX/engine path
+    const std::string armor_file; //ONNX/engine path
+    const char* save_ext; //.engine
+    int64_t tensor_width;
+    int64_t tensor_height;
+    int64_t batch_size;
+};
+int convert_to_trt(const struct model_config& config, size_t threads, uint8_t& mode, const char** car_engine_name=0, const char** armor_engine_name=0);
 namespace rm
 {
     class inferer

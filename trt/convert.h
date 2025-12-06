@@ -37,13 +37,13 @@ inline bool convert_onnx(const char* filename, const char* savename, uint32_t fl
 	static IBuilderConfig* config = builder->createBuilderConfig();
 	config->reset();
 	config->setFlags(flag),builder->setMaxThreads(threads);
-	if(imgwidth>0&&imgheight>0&&batchsize>0)
+	if(imgwidth>0&&imgheight>0&&batchsize!=0)
 	{
-		fprintf(stderr,"Creating optimization profile for dynamic tensors: Dims4{%ld, 3, %ld, %ld}\n",batchsize,imgwidth,imgheight);
+		fprintf(stderr,"Creating optimization profile for %s tensors: Dims4{%ld, 3, %ld, %ld}\n",batchsize<0?"dynamic":"static",batchsize,imgwidth,imgheight);
 		IOptimizationProfile* profile=builder->createOptimizationProfile();
-		profile->setDimensions(inputname, OptProfileSelector::kMIN, Dims4(1, 3, imgwidth, imgheight));
-		profile->setDimensions(inputname, OptProfileSelector::kOPT, Dims4(batchsize, 3, imgwidth, imgheight));
-		profile->setDimensions(inputname, OptProfileSelector::kMAX, Dims4(batchsize*2, 3, imgwidth, imgheight));
+		profile->setDimensions(inputname, OptProfileSelector::kMIN, Dims4(batchsize<0?1:batchsize, 3, imgwidth, imgheight));
+		profile->setDimensions(inputname, OptProfileSelector::kOPT, Dims4(batchsize<0?-batchsize:batchsize, 3, imgwidth, imgheight));
+		profile->setDimensions(inputname, OptProfileSelector::kMAX, Dims4(batchsize<0?-batchsize*2:batchsize, 3, imgwidth, imgheight));
 		if(profile->isValid())
 			config->addOptimizationProfile(profile);
 		else
@@ -58,7 +58,7 @@ inline bool convert_onnx(const char* filename, const char* savename, uint32_t fl
 		IHostMemory* serializedModel = builder->buildSerializedNetwork(*network, *config);
 		if(serializedModel)
 		{
-			if(written=static_cast<bool>(fwrite(serializedModel->data(),serializedModel->size(),1,file)))
+			if(written=fwrite(serializedModel->data(),serializedModel->size(),1,file))
 				fprintf(stderr,"Saved engine to %s\n",savename);
 			else
 				perror("Failed to save engine");

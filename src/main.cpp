@@ -1,6 +1,5 @@
 #include "common.h"
 #include "hikcamera.h"
-#include "convert.h"
 #include "inferer.h"
 #include "messenger.h"
 #include <signal.h>
@@ -16,16 +15,6 @@
 #include "opencv2/imgproc.hpp"
 #include "opencv2/imgcodecs.hpp"
 #include "infer/trtyolo.hpp"
-struct model_config //Only used for onnx conversion
-{
-	uint32_t builder_flag; //See NvInfer.h
-	const std::string car_file; //ONNX/engine path
-	const std::string armor_file; //ONNX/engine path
-	const char* save_ext; //.engine
-	int64_t tensor_width;
-	int64_t tensor_height;
-	int64_t batch_size;
-};
 struct video_config
 {
 	uint8_t video_type; //0-Video file; 1-Generic camera; 2-3rd party camera (hikcamera)
@@ -58,53 +47,7 @@ static void handle_exit(int type) //Exit safely or the recorded video will corru
 	running=false;
 	signal(type,SIG_DFL); //Press again to force exit
 }
-static int convert(const struct model_config& config, size_t threads, const char** car_engine_name=0, const char** armor_engine_name=0)
-{
-	char* car_engine=new char[getsavename(0,config.car_file.c_str(),config.save_ext)+1];
-	getsavename(car_engine,config.car_file.c_str(),config.save_ext);
-	char* armor_engine=new char[getsavename(0,config.armor_file.c_str(),config.save_ext)+1];
-	getsavename(armor_engine,config.armor_file.c_str(),config.save_ext);
-	if(mode==0||!file_readable(car_engine))
-	{
-		std::cerr<<"Generating car engine..."<<std::endl;
-		if(!file_readable(config.car_file.c_str())||!convert_onnx(config.car_file.c_str(),car_engine,config.builder_flag,threads,true,config.tensor_width,config.tensor_height,config.batch_size))
-		{
-			std::cerr<<"Failed to convert car model"<<std::endl;
-			if(mode==0)
-				return 1;
-			std::cerr<<"Warning: Inference not available"<<std::endl;
-			mode&=~1;
-		}
-	}
-	if(mode==0||!file_readable(armor_engine))
-	{
-		std::cerr<<"Generating armor engine..."<<std::endl;
-		if(!file_readable(config.armor_file.c_str())||!convert_onnx(config.armor_file.c_str(),armor_engine,config.builder_flag,threads,true,config.tensor_width,config.tensor_height,config.batch_size))
-		{
-			std::cerr<<"Failed to convert armor model"<<std::endl;
-			if(mode==0)
-				return 1;
-			std::cerr<<"Warning: Inference without armor model"<<std::endl;
-			mode&=~2;
-		}
-	}
-	if(mode==0)
-	{
-		std::cerr<<"Convert finished, exiting."<<std::endl;
-		delete[] car_engine;
-		delete[] armor_engine;
-		return 0;
-	}
-	if(car_engine_name)
-		*car_engine_name=car_engine;
-	else
-		delete[] car_engine;
-	if(armor_engine_name)
-		*armor_engine_name=armor_engine;
-	else
-		delete[] armor_engine;
-	return -1; //Normal
-}
+
 static std::tuple<int,int,float> apply_video_config(const struct video_config& config, cv::VideoCapture& cap, camera::hikcam& cam, cv::VideoWriter& rec)
 {
 	int width,height;
@@ -571,7 +514,7 @@ int main(int argc, char** argv)
 	int ret;
 	//Part 1 Parse config
 	cv::CommandLineParser args(argc,argv,"{help ?||Show this help}{C|config.yml|Parameter file (*.XML, *.YAML or *.JSON)}{t|4|Threads}{m|31|Mode config (Bit 0: Use car model; Bit 1: Use armor model (car model must be used); Bit 2: Display video; Bit 3: Enable serial port; Bit 4: Record original video; Bit 5: Record processed video; Bit 6: Loop input video; All 0: Generate engine only)}{w|2|Wait timeout (ms) per cycle}{I|Field.jpg|Field image (black if not set)}{W|28|Field width}{H|15|Field height}{S|40|Field image scale}{s|/dev/ttyS0|Serial device}"
-	"{B|1033|Builder flags (See NvInfer.h for detail)}{c|models/car.onnx|Car model (ONNX format with plugins)}{a|models/armor.onnx|Armor model (ONNX format with plugins)}{n||No conversion, assume model files are already in TensorRT format}{tensor-width|640|Tensor width}{tensor-height|640|Tensor height}{b|6|Batch size (maximum is doubled)}"
+	"{B|1033|Builder flags (See NvInfer.h for detail)}{c|models/car.onnx|Car model (ONNX format with plugins)}{a|models/armor.onnx|Armor model (ONNX format with plugins)}{n||No conversion, assume model files are already in TensorRT format}{tensor-width|640|Tensor width}{tensor-height|640|Tensor height}{b|-6|Batch size for armor inference (<0 means dynamic, where maximum is doubled)}"
 	"{V|2|Video type (0=Video file, 1=Generic camera (cv::VideoCapture), 2=hikcamera (MVS))}{f|-1|FPS (-1=auto, 0=keep unchanged)}{e|-1|Exposure time (-1=auto, 0=keep unchanged)}{g|-1|Gain (-1=auto)}{R||Record output file}{fourcc|avc1|Fourcc code}{q|-1|Quality of recorded video (-1=keep default)}{@file|0|Video device ID or video file}");
 	args.about("Detect cars and armors and (optionally) send their position to the serial port");
 	if(args.has("help"))
@@ -622,7 +565,7 @@ int main(int argc, char** argv)
 	std::cout<<"Model config: "<<std::endl<<"Car file: "<<model_config.car_file<<" Armor file: "<<model_config.armor_file<<std::endl;
 	if(model_config.save_ext)
 	{
-		if((ret=convert(model_config,threads,&car_engine,&armor_engine))>=0)
+		if((ret=convert_to_trt(model_config,threads,mode,&car_engine,&armor_engine))>=0)
 			return ret;
 	}
 	std::cout<<"Video config: "<<std::endl<<"Video type: "<<static_cast<unsigned>(video_config.video_type);

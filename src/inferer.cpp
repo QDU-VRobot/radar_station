@@ -1,4 +1,6 @@
 #include "inferer.h"
+#include "common.h"
+#include "convert.h"
 #include <iostream>
 #include <tuple>
 #include <utility>
@@ -12,6 +14,53 @@
 #include "infer/trtyolo.hpp"
 #include "BYTETracker.h"
 #include "STrack.h"
+int convert_to_trt(const struct model_config& config, size_t threads, uint8_t& mode, const char** car_engine_name, const char** armor_engine_name)
+{
+	char* car_engine=new char[getsavename(0,config.car_file.c_str(),config.save_ext)+1];
+	getsavename(car_engine,config.car_file.c_str(),config.save_ext);
+	char* armor_engine=new char[getsavename(0,config.armor_file.c_str(),config.save_ext)+1];
+	getsavename(armor_engine,config.armor_file.c_str(),config.save_ext);
+	if(mode==0||(mode&1)&&!file_readable(car_engine))
+	{
+		std::cerr<<"Generating car engine..."<<std::endl;
+		if(!file_readable(config.car_file.c_str())||!convert_onnx(config.car_file.c_str(),car_engine,config.builder_flag,threads,true,config.tensor_width,config.tensor_height,1))
+		{
+			std::cerr<<"Failed to convert car model"<<std::endl;
+			if(mode==0)
+				return 1;
+			std::cerr<<"Warning: Inference not available"<<std::endl;
+			mode&=~1;
+		}
+	}
+	if(mode==0||(mode&2)&&!file_readable(armor_engine))
+	{
+		std::cerr<<"Generating armor engine..."<<std::endl;
+		if(!file_readable(config.armor_file.c_str())||!convert_onnx(config.armor_file.c_str(),armor_engine,config.builder_flag,threads,true,config.tensor_width,config.tensor_height,config.batch_size))
+		{
+			std::cerr<<"Failed to convert armor model"<<std::endl;
+			if(mode==0)
+				return 1;
+			std::cerr<<"Warning: Inference without armor model"<<std::endl;
+			mode&=~2;
+		}
+	}
+	if(mode==0)
+	{
+		std::cerr<<"Convert finished, exiting."<<std::endl;
+		delete[] car_engine;
+		delete[] armor_engine;
+		return 0;
+	}
+	if(car_engine_name)
+		*car_engine_name=car_engine;
+	else
+		delete[] car_engine;
+	if(armor_engine_name)
+		*armor_engine_name=armor_engine;
+	else
+		delete[] armor_engine;
+	return -1; //Normal
+}
 namespace rm
 {
 	inferer::inferer(const char* car_engine, bool car_BGR, const std::tuple<int,int,float>& image_arg, const char* armor_engine, bool armor_BGR):car_model(0),armor_model(0),tracker(0)
