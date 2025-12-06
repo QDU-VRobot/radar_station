@@ -16,7 +16,7 @@ namespace rm
 {
 	inferer::inferer(const char* car_engine, bool car_BGR, const std::tuple<int,int,float>& image_arg, const char* armor_engine, bool armor_BGR):car_model(0),armor_model(0),tracker(0)
 	{
-		if(car_engine)
+		if(car_engine&&car_engine[0])
 		{
 			trtyolo::InferOption car_option;
 			if(car_BGR)
@@ -28,7 +28,7 @@ namespace rm
 		car_it=car_model_pool.begin();
 		if(std::get<2>(image_arg))
 			tracker=new BYTETracker(std::get<2>(image_arg), std::get<2>(image_arg));
-		if(armor_engine)
+		if(armor_engine&&armor_engine[0])
 		{
 			trtyolo::InferOption armor_option;
 			if(armor_BGR)
