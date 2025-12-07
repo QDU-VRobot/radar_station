@@ -21,9 +21,9 @@ struct model_config //Only used for onnx conversion
     int64_t tensor_height;
     int64_t batch_size;
 };
-int convert_to_trt(const struct model_config& config, size_t threads, uint8_t& mode, const char** car_engine_name=0, const char** armor_engine_name=0);
 namespace rm
 {
+    int convert_to_trt(const struct model_config& config, size_t threads, uint8_t& mode, const char** car_engine_name=0, const char** armor_engine_name=0);
     class inferer
     {
         std::deque<std::future<trtyolo::DetectRes>> thread_pool;

@@ -565,7 +565,7 @@ int main(int argc, char** argv)
 	std::cout<<"Model config: "<<std::endl<<"Car file: "<<model_config.car_file<<" Armor file: "<<model_config.armor_file<<std::endl;
 	if(model_config.save_ext)
 	{
-		if((ret=convert_to_trt(model_config,threads,mode,&car_engine,&armor_engine))>=0)
+		if((ret=rm::convert_to_trt(model_config,threads,mode,&car_engine,&armor_engine))>=0)
 			return ret;
 	}
 	std::cout<<"Video config: "<<std::endl<<"Video type: "<<static_cast<unsigned>(video_config.video_type);
