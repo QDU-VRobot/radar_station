@@ -522,7 +522,7 @@ int main(int argc, char** argv)
 		args.printMessage();
 		return 0;
 	}
-	mode=args.get<unsigned>("m"),rm::inferer::threads=threads=args.get<size_t>("t"),wait_timeout=std::chrono::milliseconds(args.get<unsigned>("w"));
+	mode=args.get<unsigned>("m"),threads=args.get<size_t>("t"),wait_timeout=std::chrono::milliseconds(args.get<unsigned>("w"));
 	struct model_config model_config={args.get<uint32_t>("B"),args.get<std::string>("c"),args.get<std::string>("a"),args.has("n")?0:".engine",args.get<int>("tensor-width"),args.get<int>("tensor-height"),args.get<int>("b")};
 	struct video_config video_config={args.get<unsigned>("V"),args.get<std::string>("@file"),args.get<unsigned>("V")!=0?args.get<unsigned>("@file"):0,args.get<float>("f"),args.get<float>("e"),args.get<float>("g"),args.get<std::string>("R"),args.get<std::string>("fourcc"),args.get<int>("q")};
 	cv::Mat cam_matrix,dist_coeffs,example_img;
@@ -685,7 +685,7 @@ int main(int argc, char** argv)
 		}
 		std::cout<<"rvec:\n"<<std::get<0>(pose_points)<<"\ntvec:\n"<<std::get<1>(pose_points)<<"\ncontours count: "<<std::get<2>(pose_points).size()<<std::endl;
 		//Part 5 Read image, infer & Show
-		rm::inferer::threads=threads,rm::inferer::timeout=video_config.video_device==0?std::chrono::milliseconds(0):wait_timeout;
+		rm::inferer::threads=threads>0?threads:std::thread::hardware_concurrency(),rm::inferer::timeout=video_config.video_device==0?std::chrono::milliseconds(0):wait_timeout;
 		rm::inferer rainfer(model_config.save_ext?car_engine:model_config.car_file.c_str(),true,image_arg,model_config.save_ext?armor_engine:model_config.armor_file.c_str(),true);
 		ret=run(rainfer,cap,cam,rec,msger,image_arg,pose_points,cam_matrix,dist_coeffs,example_img,args.get<float>("S"));
 	}

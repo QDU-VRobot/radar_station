@@ -21,12 +21,12 @@ public:
 };
 inline bool convert_onnx(const char* filename, const char* savename, uint32_t flag, int32_t threads=1, bool force=false, int64_t imgwidth=0, int64_t imgheight=0, int64_t batchsize=4, const char* inputname="images")
 {
-	Logger logger;
+	static Logger logger(ILogger::Severity::kINFO);
 	static IBuilder* builder = createInferBuilder(logger);
 	INetworkDefinition* network = builder->createNetworkV2(1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH));
 	IParser* parser = createParser(*network, logger);
 	fprintf(stderr,"Parsing onnx model %s\n",filename);
-	if (!initLibNvInferPlugins(&logger,"")||!parser->parseFromFile(filename, static_cast<int32_t>(ILogger::Severity::kWARNING)))
+	if (!initLibNvInferPlugins(&logger,"")||!parser->parseFromFile(filename, static_cast<int>(ILogger::Severity::kINFO)))
 	{
 		for (int32_t i = 0; i < parser->getNbErrors(); ++i)
 			logger.log(ILogger::Severity::kINTERNAL_ERROR,parser->getError(i)->desc());
@@ -36,10 +36,10 @@ inline bool convert_onnx(const char* filename, const char* savename, uint32_t fl
 	}
 	static IBuilderConfig* config = builder->createBuilderConfig();
 	config->reset();
-	config->setFlags(flag),builder->setMaxThreads(threads);
+	config->setFlags(flag),config->setDefaultDeviceType(DeviceType::kDLA),builder->setMaxThreads(threads);
 	if(imgwidth>0&&imgheight>0&&batchsize!=0)
 	{
-		fprintf(stderr,"Creating optimization profile for %s tensors: Dims4{%ld, 3, %ld, %ld}\n",batchsize<0?"dynamic":"static",batchsize,imgwidth,imgheight);
+		fprintf(stderr,"Creating optimization profile for %s tensors: Dims4{%ld, 3, %ld, %ld}\n",batchsize<0?"dynamic":"static",batchsize<0?-batchsize:batchsize,imgwidth,imgheight);
 		IOptimizationProfile* profile=builder->createOptimizationProfile();
 		profile->setDimensions(inputname, OptProfileSelector::kMIN, Dims4(batchsize<0?1:batchsize, 3, imgwidth, imgheight));
 		profile->setDimensions(inputname, OptProfileSelector::kOPT, Dims4(batchsize<0?-batchsize:batchsize, 3, imgwidth, imgheight));

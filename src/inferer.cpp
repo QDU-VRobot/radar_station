@@ -144,13 +144,21 @@ namespace rm
 				tracking[ids[it->second.first]]=std::make_pair(it->first,it->second.second);
 		}
 	}
-	std::map<int, std::pair<uint8_t,float>> inferer::armor_infer(const std::vector<cv::Mat>& armors, const std::vector<int>& ids, float fps)
+	std::map<int, std::pair<uint8_t,float>> inferer::armor_infer(const std::vector<cv::Mat>& cars, const std::vector<int>& ids, float fps)
 	{
 		std::map<int,std::pair<uint8_t,float>> tracking=track_labels;
-		std::vector<trtyolo::Image> imgs; //For inference
-		for(auto it=armors.begin();it!=armors.end();++it)
-			imgs.emplace_back(it->data,it->cols,it->rows); //Convert to yolo-trt format
-		deduplicate(tracking,armor_model->predict(imgs),ids,fps);
+		std::vector<trtyolo::DetectRes> inferred;
+		inferred.reserve(cars.size());
+		for(auto it=cars.begin();it<cars.end();it+=armor_model->batch())
+		{
+			std::vector<trtyolo::Image> imgs; //For inference
+			auto end=MIN(it+armor_model->batch(),cars.end());
+			for(auto i=it;i!=end;++i)
+				imgs.emplace_back(i->data,i->cols,i->rows); //Convert to yolo-trt format
+			std::vector<trtyolo::DetectRes>&& tmp=armor_model->predict(imgs);
+			std::move(tmp.begin(),tmp.end(),std::back_inserter(inferred));
+		}
+		deduplicate(tracking,inferred,ids,fps);
 		return tracking;
 	}
 	std::pair<const std::vector<STrack>, const std::map<int, std::pair<uint8_t, float>>> inferer::track(const trtyolo::DetectRes& inferred, std::chrono::milliseconds delay)
@@ -163,10 +171,11 @@ namespace rm
 		{
 			std::vector<cv::Mat> armors;
 			std::vector<int> ids;
+			armors.reserve(tracked.size()),ids.reserve(tracked.size());
 			for(auto i=tracked.begin();i!=tracked.end();++i)
 			{
 				float left=MAX(i->tlbr[0],0),top=MAX(i->tlbr[1],0),width=MIN(i->tlbr[2],tmp_img.cols)-left,height=MIN(i->tlbr[3],tmp_img.rows)-top; //tlbr=top, left, bottom and right edge
-				armors.push_back(tmp_img(cv::Rect2f(left,top,width,height)).clone()); //Do not overflow
+				armors.push_back(tmp_img(cv::Rect2f(left,top,width,height)).clone()); //Do not overflow; Make image continous
 				ids.push_back(i->track_id);
 			}
 			track_labels=armor_infer(armors,ids,1000.0/delay.count());
