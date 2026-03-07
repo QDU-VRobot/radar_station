@@ -9,7 +9,7 @@
 namespace rm
 {
     //See RoboMaster file
-    #pragma pack(1)
+    #pragma pack(push, 1)
     struct header
     {
         uint8_t SOF;
@@ -39,7 +39,7 @@ namespace rm
         uint8_t dart_remaining_time;
         uint8_t dart_shot : 3;
         uint8_t dart_count : 3;
-        uint8_t dart_target : 2;
+        uint8_t dart_target : 3;
         uint8_t reserved;
     };
     struct robot_status
@@ -58,9 +58,9 @@ namespace rm
     };
     struct radar_mark_data
     {
-        uint8_t foe_mark : 5;
-        uint8_t ally_mark : 5;
-        uint8_t reserved : 6;
+        uint8_t foe_mark : 6;
+        uint8_t ally_mark : 6;
+        uint8_t reserved : 4;
     };
     struct radar_info
     {
@@ -151,7 +151,7 @@ namespace rm
         uint8_t data[MAX_BUF];
     };
     typedef uint16_t frame_tail;
-    #pragma pack()
+    #pragma pack(pop)
     struct serial_info //See RoboMaster doc
     {
         uint16_t stage_remain_time;
@@ -159,8 +159,8 @@ namespace rm
         uint16_t foe_outpost_base_HP;
         uint8_t robot_id;
         uint8_t game_progress:3;
-        uint8_t foe_mark:5;
-        uint8_t ally_mark:5;
+        uint8_t foe_mark:6;
+        uint8_t ally_mark:6;
         uint8_t vulnerability:2;
         bool vulnerating:1;
         uint8_t encrypt_level:2;

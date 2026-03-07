@@ -375,11 +375,11 @@ static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const
 				cv::putText(img,std::string("Team: ")+(msger.serial_info.robot_id/100?"Blue":"Red"),cv::Point(350,30),0,1,cv::Scalar(0,255,0),2);
 			{
 				std::string marked("Ally: ");
-				for(uint8_t i=1;i<=1<<4;i<<=1)
+				for(uint8_t i=1;i<=1<<5;i<<=1)
 					marked+=msger.serial_info.foe_mark&i?'1':'0';
 				cv::putText(img,marked,cv::Point(img.cols-415,img.rows-40),0,1,cv::Scalar(0,255,0),2);
 				marked="Foe: ";
-				for(uint8_t i=1;i<=1<<4;i<<=1)
+				for(uint8_t i=1;i<=1<<5;i<<=1)
 					marked+=msger.serial_info.ally_mark&i?'1':'0';
 				cv::putText(img,marked,cv::Point(img.cols-420,img.rows-10),0,1,cv::Scalar(0,255,0),2);
 			}

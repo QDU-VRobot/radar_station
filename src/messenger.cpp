@@ -96,10 +96,10 @@ namespace rm
 			break;
 			case 0x020C:
 				printf("Marked: ");
-				for(uint8_t i=1;i<=1<<4;i<<=1)
+				for(uint8_t i=1;i<=1<<5;i<<=1)
 					printf("%c",serial_info.foe_mark&i?'1':'0');
 				printf(" ");
-				for(uint8_t i=1;i<=1<<4;i<<=1)
+				for(uint8_t i=1;i<=1<<5;i<<=1)
 					printf("%c",serial_info.ally_mark&i?'1':'0');
 				printf("\n");
 				serial_info.foe_mark=recv_buf.radar_mark_data.foe_mark;
