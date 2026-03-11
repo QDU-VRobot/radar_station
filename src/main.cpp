@@ -313,9 +313,10 @@ static std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>
 static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const std::map<int, std::pair<uint8_t,float>>>& result, const cv::Mat& m1, const cv::Mat& m2, const std::vector<std::pair<std::vector<cv::Point2f>,float>>& contours, cv::VideoWriter& rec, rm::msg& msger, cv::Mat&& example_img, float scale, unsigned short latency=0) //Display, send to referee or record
 {
 	std::vector<cv::Point2f> center_points; //Mark to the minimap and send to server
+	std::vector<uint8_t> ids;
+	static std::map<uint8_t,std::pair<uint8_t,cv::Scalar>> id_map={{0,std::pair(1,cv::Scalar(255,255,0))},{1,std::pair(2,cv::Scalar(255,255,0))},{2,std::pair(3,cv::Scalar(255,255,0))},{3,std::pair(4,cv::Scalar(255,255,0))},{4,std::pair(5,cv::Scalar(255,255,0))},{5,std::pair(7,cv::Scalar(255,255,0))},{6,std::pair(1,cv::Scalar(255,0,255))},{7,std::pair(2,cv::Scalar(255,0,255))},{8,std::pair(3,cv::Scalar(255,0,255))},{9,std::pair(4,cv::Scalar(255,0,255))},{10,std::pair(5,cv::Scalar(255,0,255))},{11,std::pair(7,cv::Scalar(255,0,255))}};
 	if((mode&1)==1&&result.first.size()>0)
 	{
-		std::vector<uint8_t> ids;
 		for(auto it=result.first.begin();it!=result.first.end();++it)
 		{
 			cv::Point2f pos2d(it->tlbr[0]+it->tlwh[2]/2,it->tlbr[3]-it->tlwh[2]/6); //May not accurate
@@ -400,8 +401,12 @@ static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const
 		{
 			if(!example_img.empty())
 			{
-				for(auto it=center_points.begin();it!=center_points.end();++it)
-					cv::circle(example_img,m1.empty()||m2.empty()?cv::Point(it->x*example_img.cols/img.cols,it->y*example_img.rows/img.rows):cv::Point(it->x*scale,example_img.rows-it->y*scale),2,cv::Scalar(0,255,0),cv::LineTypes::FILLED);
+				for(size_t i=0;i<center_points.size();++i)
+				{
+					cv::Point p=m1.empty()||m2.empty()?cv::Point(center_points[i].x*example_img.cols/img.cols,center_points[i].y*example_img.rows/img.rows):cv::Point(center_points[i].x*scale,example_img.rows-center_points[i].y*scale);
+					if(ids[i]!=(uint8_t)-1) cv::putText(example_img,std::to_string(id_map[ids[i]].first),p,0,1,id_map[ids[i]].second,2);
+					else cv::circle(example_img,p,2,cv::Scalar(0,255,0),cv::LineTypes::FILLED);
+				}
 				cv::imshow("Minimap",example_img);
 			}
 			cv::imshow("Radar",img);
