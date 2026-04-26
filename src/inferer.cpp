@@ -16,16 +16,16 @@
 #include "STrack.h"
 namespace rm
 {
-	int convert_to_trt(const struct model_config& config, size_t threads, uint8_t& mode, const char** car_engine_name, const char** armor_engine_name)
+	int convert_to_trt(const struct model_config& config, size_t threads, uint8_t& mode, std::string& car_engine, std::string& armor_engine)
 	{
-		char* car_engine=new char[getsavename(0,config.car_file.c_str(),config.save_ext)+1];
-		getsavename(car_engine,config.car_file.c_str(),config.save_ext);
-		char* armor_engine=new char[getsavename(0,config.armor_file.c_str(),config.save_ext)+1];
-		getsavename(armor_engine,config.armor_file.c_str(),config.save_ext);
-		if(mode==0||(mode&1)&&!file_readable(car_engine))
+		car_engine.reserve(getsavename(0,config.car_file.c_str(),config.save_ext)+1);
+		getsavename(car_engine.data(),config.car_file.c_str(),config.save_ext);
+		armor_engine.reserve(getsavename(0,config.armor_file.c_str(),config.save_ext)+1);
+		getsavename(armor_engine.data(),config.armor_file.c_str(),config.save_ext);
+		if(mode==0||(mode&1)&&!file_readable(car_engine.c_str()))
 		{
 			std::cerr<<"Generating car engine..."<<std::endl;
-			if(!file_readable(config.car_file.c_str())||!convert_onnx(config.car_file.c_str(),car_engine,config.builder_flag,threads,true,config.tensor_width,config.tensor_height,1))
+			if(!file_readable(config.car_file.c_str())||!convert_onnx(config.car_file.c_str(),car_engine.c_str(),config.builder_flag,threads,true,config.tensor_width,config.tensor_height,1))
 			{
 				std::cerr<<"Failed to convert car model"<<std::endl;
 				if(mode==0)
@@ -34,10 +34,10 @@ namespace rm
 				mode&=~1;
 			}
 		}
-		if(mode==0||(mode&2)&&!file_readable(armor_engine))
+		if(mode==0||(mode&2)&&!file_readable(armor_engine.c_str()))
 		{
 			std::cerr<<"Generating armor engine..."<<std::endl;
-			if(!file_readable(config.armor_file.c_str())||!convert_onnx(config.armor_file.c_str(),armor_engine,config.builder_flag,threads,true,config.tensor_width,config.tensor_height,config.batch_size))
+			if(!file_readable(config.armor_file.c_str())||!convert_onnx(config.armor_file.c_str(),armor_engine.c_str(),config.builder_flag,threads,true,config.tensor_width,config.tensor_height,config.batch_size))
 			{
 				std::cerr<<"Failed to convert armor model"<<std::endl;
 				if(mode==0)
@@ -49,18 +49,8 @@ namespace rm
 		if(mode==0)
 		{
 			std::cerr<<"Convert finished, exiting."<<std::endl;
-			delete[] car_engine;
-			delete[] armor_engine;
 			return 0;
 		}
-		if(car_engine_name)
-			*car_engine_name=car_engine;
-		else
-			delete[] car_engine;
-		if(armor_engine_name)
-			*armor_engine_name=armor_engine;
-		else
-			delete[] armor_engine;
 		return -1; //Normal
 	}
 	inferer::inferer(const char* car_engine, bool car_BGR, const std::tuple<int,int,float>& image_arg, const char* armor_engine, bool armor_BGR):car_model(0),armor_model(0),tracker(0)
@@ -153,6 +143,7 @@ namespace rm
 		{
 			std::vector<trtyolo::Image> imgs; //For inference
 			auto end=MIN(it+armor_model->batch(),cars.end());
+			imgs.reserve(end-it);
 			for(auto i=it;i!=end;++i)
 				imgs.emplace_back(i->data,i->cols,i->rows); //Convert to yolo-trt format
 			std::vector<trtyolo::DetectRes>&& tmp=armor_model->predict(imgs);
@@ -164,6 +155,7 @@ namespace rm
 	std::pair<const std::vector<STrack>, const std::map<int, std::pair<uint8_t, float>>> inferer::track(const trtyolo::DetectRes& inferred, std::chrono::milliseconds delay)
 	{
 		std::vector<Object> objects;
+		objects.reserve(inferred.num);
 		for(size_t i=0;i<inferred.num;++i)
 			objects.push_back({cv::Rect2f(inferred.boxes[i].left,inferred.boxes[i].top,inferred.boxes[i].right-inferred.boxes[i].left,inferred.boxes[i].bottom-inferred.boxes[i].top),inferred.classes[i],inferred.scores[i]});
 		tracked=tracker->update(objects);

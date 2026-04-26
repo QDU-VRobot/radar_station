@@ -23,11 +23,12 @@ inline size_t getsavename(char* savename, const char* pathname, const char* save
 	fileext=strrchr(fileext?fileext+1:pathname,'.');
 	size_t extlen=sizeof(saveext);
 	size_t savelen=strlen(pathname)+extlen-(fileext?strlen(fileext):0);
-	if(!savename)
-		return savelen;
-	strncpy(savename,pathname,savelen);
-	strcpy(savename+savelen-extlen,saveext);
-	return 0;
+	if(savename)
+	{
+		strncpy(savename,pathname,savelen);
+		strcpy(savename+savelen-extlen,saveext);
+	}
+	return savelen;
 }
 inline cv::Mat calculateCameraMatrix(cv::Size imgsize, double fov) //Returns an ideal camera matrix with a given FOV
 {

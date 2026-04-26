@@ -126,13 +126,13 @@ namespace rm
 				switch(recv_buf.robot_interaction_data.header.data_cmd_id)
 				{
 					case 0x0279: //Receive pos from sentry
-						for(size_t i=0;i<6;++i)
-							if(recv_buf.robot_interaction_data.robot_pos.data[i*2]>0&&recv_buf.robot_interaction_data.robot_pos.data[i*2+1]>0)
+						for(size_t i=0;i<12;++i)
+							if(pos_cache[i]>=0&&recv_buf.robot_interaction_data.robot_pos.data[i*2]>0&&recv_buf.robot_interaction_data.robot_pos.data[i*2+1]>0)
 							{
-								pos_retries[i]=0; //Make sure the pos being modified is not used
+								pos_cache[i]=0; //Make sure the pos being modified is not used
 								printf("Robot position updated (%zu)\n",i);
-								pos_from_sentry[i].x=recv_buf.robot_interaction_data.robot_pos.data[i*2],pos_from_sentry[i].y=recv_buf.robot_interaction_data.robot_pos.data[i*2+1];
-								pos_retries[i]=10; //Override radar's pos for 1 sec
+								pos_from_sentry.data[i*2]=recv_buf.robot_interaction_data.robot_pos.data[i*2],pos_from_sentry.data[i*2+1]=recv_buf.robot_interaction_data.robot_pos.data[i*2+1];
+								pos_cache[i]=20; //Override radar's pos for 2 secs
 							}
 					break;
 				}
@@ -149,7 +149,7 @@ namespace rm
 		ssize_t state;
 		while(get_fd()>=0) //Loop if not closed manually
 		{
-			while(get_fd()>=0) //Loop unless an error occurred
+			while(get_fd()>=0) //Loop until an error occurred
 			{
 				state=read(&recv_buf.header,1); //Read SOF
 				if(state<0)
@@ -210,24 +210,24 @@ namespace rm
 		#endif
 		return write_wCRC16(&buf.data,buf_len)==static_cast<ssize_t>(buf_len);
 	}
-	uint8_t msg::poll(void)
+	void msg::poll(void)
 	{
-		uint8_t ret=0;
 		while(get_fd()>=0&&!serial_info.robot_id)
 			std::this_thread::sleep_for(std::chrono::milliseconds(500));
 		while(get_fd()>=0)
 		{
 			uint8_t team=serial_info.robot_id/100;
-			union robot_pos pos={.data={0}};
-			ret=0;
+			union both_robot_pos pos={.data={0}};
 			if(timer::now()>timestamp[0])
 			{
 				size_t count=0;
-				for(size_t i=0;i<sizeof(pos_retries)/sizeof(uint8_t);++i)
-					if(pos_retries[i]&&--pos_retries[i])
-						pos.data[i*2]=pos_from_sentry[i].x,pos.data[i*2+1]=pos_from_sentry[i].y,++count; //Override pos with sentry's
+				for(size_t i=0;i<sizeof(pos_cache)/sizeof(int8_t);++i)
+					if(pos_cache[i]>0&&--pos_cache[i])
+						pos.data[i*2]=pos_from_sentry.data[i*2],pos.data[i*2+1]=pos_from_sentry.data[i*2+1],++count; //Override pos with sentry's
+					else if(pos_cache[i]<0&&++pos_cache[i])
+						pos.data[i*2]=static_cast<float>(pos_from_radio.data[i*2]),pos.data[i*2+1]=static_cast<float>(pos_from_radio.data[i*2+1]),++count; //Override pos with radio's
 				for(size_t i=0,id;i<pos_from_camera.second.size();++i)
-					if(pos_from_camera.second[i]!=-1&&(id=std::find(robot_classes[team].begin(),robot_classes[team].end(),pos_from_camera.second[i])-robot_classes[team].begin())<6&&!pos_retries[id])
+					if(pos_from_camera.second[i]!=(uint8_t)-1&&((id=std::find(robot_classes[team].begin(),robot_classes[team].end(),pos_from_camera.second[i])-robot_classes[team].begin())<6||(id=6+std::find(robot_classes[!team].begin(),robot_classes[!team].end(),pos_from_camera.second[i])-robot_classes[!team].begin())<12)&&!pos_cache[id])
 					{
 						pos.data[id*2]=pos_from_camera.first[i].x,pos.data[id*2+1]=pos_from_camera.first[i].y,++count;
 						#ifndef NDEBUG
@@ -237,16 +237,15 @@ namespace rm
 				if(count>0)
 				{
 					//Send pos
-					union map_robot buf;
-					for(size_t i=0;i<sizeof(union robot_pos)/sizeof(float);++i)
+					union both_map_robot buf;
+					for(size_t i=0;i<sizeof(pos)/sizeof(float);++i)
 						buf.data[i]=MAX(pos.data[i],0)*100; //Convert unit (m->cm) and ensure not overflow
-					if(referee_send(0x0305,sizeof(union map_robot),&buf))
+					if(referee_send(0x0305,sizeof(buf),&buf))
 					{
 						#ifndef NDEBUG
 						fprintf(stderr,"Sent data to server\n");
 						#endif
 						timestamp[0]+=std::chrono::milliseconds(100);
-						ret|=1; //Complete, return bit 0 set to 1
 					}
 				}
 			}
@@ -275,7 +274,6 @@ namespace rm
 							fprintf(stderr,"\n");
 						}
 						timestamp[1]+=std::chrono::milliseconds(100);
-						ret|=2; //Complete, return bit 0 set to 1
 					}
 				}
 			}
@@ -289,10 +287,8 @@ namespace rm
 					fprintf(stderr,"Sent data to robot\n");
 					#endif
 					timestamp[2]+=std::chrono::milliseconds(50);
-					ret|=4; //Complete, return bit 0 set to 1
 				}
 			}
 		}
-		return ret;
 	}
 }
