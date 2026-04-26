@@ -29,17 +29,27 @@ graph TB
     I8 --> O0; O5 --> 10
 ```
 
+## System requirements:
+* A device with NVIDIA GPU (inc. edge computing device)
+* 4GB free RAM and VRAM
+* Generic camera or HikCamera (wide-angle lens‌ recommended)
+* Linux
+* C++17 compiler
+* CMake
+* git-lfs
+
 ## Usage:
-1. Install a compiler that supports C++17 and dependencies below (plus **git** and **git-lfs** for cloning and **cmake** for building)
-2. Clone this repository **(Make sure models are cloned too, or train your own model)**
-3. Run `cmake -B build` to generate a *build* folder
-4. Run `cmake --build build/ -j` to compile
-5. Check executables and libraries in *build* folder
-6. Use the calibration executable to generate camera config (`build/bin/calibration`)
-7. Add more parameters by checking help output (`build/bin/radar --help`)
-8. Set up camera and serial port (based on RoboMaster 2026 serial protocol V1.0.0)
-9. Mark points on first startup (first contour for PnP and other contours for highlands)
-10. Check result
+1. Clone this repository **(Make sure models are cloned too, or train your own model and convert to ONNX)**
+2. Run `cmake -B build` to generate a *build* folder
+3. Run `cmake --build build/ -j` to compile
+4. Check executables and libraries in *build* folder
+5. Use the calibration executable to generate camera config (`build/bin/calibration`)
+6. Add more parameters by checking help output (`build/bin/radar --help`)
+7. Set up camera and serial port (based on RoboMaster 2026 serial protocol V1.0.0)
+8. Mark points on first startup (first contour for PnP and other contours for highlands)
+9. Check result
+
+>Remove config and redo step 7 and 8 when starting next game
 
 ## Bundled libraries: (Compiled along with main program)
 * [TensorRT-YOLO](https://github.com/laugh12321/TensorRT-YOLO)
@@ -51,13 +61,13 @@ graph TB
 * [CUDA & TensorRT](https://developer.nvidia.com/cuda-downloads)
 * [MVS](https://www.hikrobotics.com/cn/machinevision/service/download) (For HikCamera)
 
-The ONNX files are built by [trtyolo](https://github.com/laugh12321/TensorRT-YOLO/blob/main/docs/cn/model_export.md) with plugins and dynamic batch
+The ONNX files are built by [trtyolo](https://github.com/laugh12321/trtyolo-export) with plugins and dynamic batch
 
 ## Result:
-In RoboMaster 2025, this program vulnerated opponents for 338.1s per game in average
+In RoboMaster 2025, this program vulnerated opponents for 338.1s per game in average with 8mm lens
 
 ## Special thanks:
-Datasets provided by [Taurus](https://github.com/SCAU-RM-NAV/RM2023_Radar_Dataset)
+Datasets provided by [ENTERPRIZE](https://hkustconnect-my.sharepoint.com/:f:/g/personal/zguobd_connect_ust_hk/EvYDNGry-DBBjr9eSzpacGcBPlSS7KpMZmSE3KGzeJMJKw)
 
 ## TODO:
 * [ ] Train a better model with videos recorded
