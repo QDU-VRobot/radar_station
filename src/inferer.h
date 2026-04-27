@@ -29,9 +29,9 @@ namespace rm
         std::deque<std::future<trtyolo::DetectRes>> thread_pool;
         std::vector<std::unique_ptr<trtyolo::DetectModel>> car_model_pool;
         std::vector<std::unique_ptr<trtyolo::DetectModel>>::iterator car_it;
-        trtyolo::DetectModel* car_model;
-        trtyolo::DetectModel* armor_model;
-        BYTETracker* tracker;
+        std::unique_ptr<trtyolo::DetectModel> car_model;
+        std::unique_ptr<trtyolo::DetectModel> armor_model;
+        std::unique_ptr<BYTETracker> tracker;
         cv::Mat tmp_img; //Sometimes img may be empty, so use the old one instead
         std::map<int, std::pair<uint8_t,float>> armor_infer(const std::vector<cv::Mat>& armors, const std::vector<int>& ids, float fps);
         static void deduplicate(std::map<int,std::pair<uint8_t,float>>& tracking, const std::vector<trtyolo::DetectRes>& result, const std::vector<int>& labels, float fps=0);
@@ -47,7 +47,6 @@ namespace rm
         #endif
         trtyolo::DetectRes infer(const cv::Mat& img);
         std::pair<const std::vector<STrack>, const std::map<int, std::pair<uint8_t, float>>> track(const trtyolo::DetectRes& inferred, std::chrono::milliseconds delay);
-        ~inferer();
     };
 }
 
