@@ -25,9 +25,10 @@ namespace rm
         uint16_t stage_remain_time;
         uint64_t SyncTimeStamp;
     };
-    struct game_robot_HP
+    union game_robot_HP
     {
         uint16_t ally_HP[8]; //123457OB
+        uint16_t opponent_HP[6]; //1234_7
     };
     struct referee_warning
     {
@@ -157,7 +158,7 @@ namespace rm
             {
                 struct game_status game_status;
                 uint8_t winner;
-                struct game_robot_HP game_robot_HP;
+                union game_robot_HP game_robot_HP;
                 struct referee_warning referee_warning;
                 struct dart_info dart_info;
                 struct robot_status robot_status;
@@ -206,6 +207,7 @@ namespace rm
         msg():timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),pos_cache{0},guessed_password{0},password_retries(0),vulnerated(0){}
         msg(serial::terminal&& s):serial::terminal(s),timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),pos_cache{0},guessed_password{0},password_retries(0),vulnerated(0){}
         static bool serial_quick_setup(serial::terminal& port, const char* filename=0);
+        static std::vector<uint8_t> generate_password(size_t len);
         void receive(void);
         bool referee_send(uint16_t cmd_id, uint16_t data_length, const void* data);
         void poll(void);
