@@ -67,7 +67,7 @@ The ONNX files are built by [trtyolo](https://github.com/laugh12321/trtyolo-expo
 In RoboMaster 2025, this program vulnerated opponents for 338.1s per game in average with 8mm lens
 
 ## Special thanks:
-Datasets provided by [ENTERPRIZE](https://hkustconnect-my.sharepoint.com/:f:/g/personal/zguobd_connect_ust_hk/EvYDNGry-DBBjr9eSzpacGcBPlSS7KpMZmSE3KGzeJMJKw)
+Datasets provided by [Taurus](https://github.com/SCAU-RM-NAV/RM2023_Radar_Dataset)
 
 ## TODO:
 * [ ] Train a better model with videos recorded
