@@ -3,10 +3,21 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 #include "opencv2/core.hpp"
 #include "opencv2/videoio.hpp"
 extern "C" //Just for shorter symbols :)
 {
+enum mode_flag : uint8_t {
+    MODE_USE_CAR=0,
+    MODE_USE_ARMOR=1,
+    MODE_DISPLAY=2,
+    MODE_SERIAL=3,
+    MODE_RECORD_RAW=4,
+    MODE_RECORD_PROC=5,
+    MODE_LOOP=6,
+    MODE_RADIO=7
+};
 inline bool file_readable(const char* filename)
 {
     FILE* test=fopen(filename,"rb");

@@ -7,6 +7,7 @@
 #include <future>
 #include <tuple>
 #include <deque>
+#include <bitset>
 #include "opencv2/core.hpp"
 #include "infer/trtyolo.hpp"
 #include "BYTETracker.h"
@@ -23,7 +24,7 @@ struct model_config //Only used for onnx conversion
 };
 namespace rm
 {
-    int convert_to_trt(const struct model_config& config, size_t threads, uint8_t& mode, std::string& car_engine_name, std::string& armor_engine_name);
+    int convert_to_trt(const struct model_config& config, size_t threads, std::bitset<8>& mode, std::string& car_engine_name, std::string& armor_engine_name);
     class inferer
     {
         std::deque<std::future<trtyolo::DetectRes>> thread_pool;

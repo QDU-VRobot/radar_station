@@ -16,37 +16,37 @@
 #include "STrack.h"
 namespace rm
 {
-    int convert_to_trt(const struct model_config& config, size_t threads, uint8_t& mode, std::string& car_engine, std::string& armor_engine)
+    int convert_to_trt(const struct model_config& config, size_t threads, std::bitset<8>& mode, std::string& car_engine, std::string& armor_engine)
     {
         car_engine.reserve(getsavename(0,config.car_file.c_str(),config.save_ext)+1);
         getsavename(car_engine.data(),config.car_file.c_str(),config.save_ext);
         armor_engine.reserve(getsavename(0,config.armor_file.c_str(),config.save_ext)+1);
         getsavename(armor_engine.data(),config.armor_file.c_str(),config.save_ext);
-        if(mode==0||(mode&1)&&!file_readable(car_engine.c_str()))
+        if(mode.none()||mode[MODE_USE_CAR]&&!file_readable(car_engine.c_str()))
         {
             std::cerr<<"Generating car engine..."<<std::endl;
             if(!file_readable(config.car_file.c_str())||!convert_onnx(config.car_file.c_str(),car_engine.c_str(),config.builder_flag,threads,true,config.tensor_width,config.tensor_height,1))
             {
                 std::cerr<<"Failed to convert car model"<<std::endl;
-                if(mode==0)
+                if(mode.none())
                     return 1;
                 std::cerr<<"Warning: Inference not available"<<std::endl;
-                mode&=~1;
+                mode[MODE_USE_CAR]=0;
             }
         }
-        if(mode==0||(mode&2)&&!file_readable(armor_engine.c_str()))
+        if(mode.none()||mode[MODE_USE_ARMOR]&&!file_readable(armor_engine.c_str()))
         {
             std::cerr<<"Generating armor engine..."<<std::endl;
             if(!file_readable(config.armor_file.c_str())||!convert_onnx(config.armor_file.c_str(),armor_engine.c_str(),config.builder_flag,threads,true,config.tensor_width,config.tensor_height,config.batch_size))
             {
                 std::cerr<<"Failed to convert armor model"<<std::endl;
-                if(mode==0)
+                if(mode.none())
                     return 1;
                 std::cerr<<"Warning: Inference without armor model"<<std::endl;
-                mode&=~2;
+                mode[MODE_USE_ARMOR]=0;
             }
         }
-        if(mode==0)
+        if(mode.none())
         {
             std::cerr<<"Convert finished, exiting."<<std::endl;
             return 0;

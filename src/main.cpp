@@ -8,6 +8,7 @@
 #include <chrono>
 #include <tuple>
 #include <string>
+#include <bitset>
 #include "opencv2/calib3d.hpp"
 #include "opencv2/core.hpp"
 #include "opencv2/highgui.hpp"
@@ -36,7 +37,7 @@ static inline int init_hikcamera(camera::hikcam& cam, uint8_t device_num)
     std::cerr<<"Using camera "<<static_cast<unsigned>(device_num)<<std::endl;
     return cam.open(devlist.pDeviceInfo[device_num]);
 }
-uint8_t mode; //See help output
+std::bitset<8> mode;
 size_t threads,rm::inferer::threads; //For car_infer;
 std::chrono::milliseconds wait_timeout,rm::inferer::timeout; //Timeout for inferring to finish per cycle
 std::vector<std::vector<uint8_t>> rm::msg::robot_classes={{0,1,2,3,254,5},{6,7,8,9,254,11}}; //{Blue{123467},Red{123467}}, Configurable
@@ -118,9 +119,9 @@ static std::tuple<int,int,float> apply_video_config(const struct video_config& c
         if(config.quality>=0)
             rec_config={cv::VIDEOWRITER_PROP_QUALITY,config.quality};
         if(config.fourcc.size())
-            rec.open(name.c_str(),cv::VideoWriter::fourcc(config.fourcc[0],config.fourcc[1],config.fourcc[2],config.fourcc[3]),(mode&48)==48?fps*2:fps,cv::Size(width,height),rec_config);
+            rec.open(name.c_str(),cv::VideoWriter::fourcc(config.fourcc[0],config.fourcc[1],config.fourcc[2],config.fourcc[3]),mode[MODE_RECORD_RAW]&&mode[MODE_RECORD_PROC]?fps*2:fps,cv::Size(width,height),rec_config);
         else
-            rec.open(name.c_str(),0,(mode&48)==48?fps*2:fps,cv::Size(width,height),rec_config); //Save pictures?
+            rec.open(name.c_str(),0,mode[MODE_RECORD_RAW]&&mode[MODE_RECORD_PROC]?fps*2:fps,cv::Size(width,height),rec_config); //Save pictures?
     }
     return std::make_tuple(width,height,fps);
 }
@@ -313,7 +314,7 @@ static std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>
 static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const std::map<int, std::pair<uint8_t,float>>>& result, const cv::Mat& m1, const cv::Mat& m2, const std::vector<std::pair<std::vector<cv::Point2f>,float>>& contours, cv::VideoWriter& rec, rm::msg& msger, cv::Mat&& example_img, float scale, unsigned short latency=0) //Display, send to referee or record
 {
     std::vector<cv::Point2f> center_points; //Mark to the minimap and send to server
-    if((mode&1)==1&&result.first.size()>0)
+    if(mode[MODE_USE_CAR]&&result.first.size()>0)
     {
         std::vector<uint8_t> ids;
         center_points.reserve(result.first.size());
@@ -343,16 +344,16 @@ static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const
                 ids.push_back(-1);
             std::cout<<std::endl;
         }
-        if((mode&8)==8)
+        if(mode[MODE_SERIAL])
             msger.pos_from_camera=std::make_pair(center_points,ids);
     }
-    if(!img.empty()&&((mode&4)==4||(mode&48)&&rec.isOpened()))
+    if(!img.empty()&&(mode[MODE_DISPLAY]||(mode[MODE_RECORD_RAW]||mode[MODE_RECORD_PROC])&&rec.isOpened()))
     {
-        if((mode&16)==16&&rec.isOpened())
+        if(mode[MODE_RECORD_RAW]&&rec.isOpened())
             rec.write(img);
         //Draw on output image
         cv::putText(img,std::string("Latency: ")+std::to_string(latency)+"ms",cv::Point(img.cols-255,30),0,1,cv::Scalar(0,255,0),2);
-        if((mode&8)==8)
+        if(mode[MODE_SERIAL])
         {
             cv::putText(img,std::string("State: ")+std::to_string(msger.serial_info.game_progress),cv::Point(5,30),0,1,cv::Scalar(0,255,0),2);
             if(msger.serial_info.game_progress==5)
@@ -393,12 +394,12 @@ static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const
         {
             cv::rectangle(img,cv::Rect(it->tlwh[0],it->tlwh[1],it->tlwh[2],it->tlwh[3]),cv::Scalar(0,255,0),2);
             cv::putText(img,std::to_string(it->track_id)+':'+std::to_string(it->score),cv::Point(it->tlbr[0],it->tlbr[1]),1,1,cv::Scalar(0,255,0),1);
-            if((mode&3)==3&&result.second.count(it->track_id))
+            if(mode[MODE_USE_CAR]&&mode[MODE_USE_ARMOR]&&result.second.count(it->track_id))
                 cv::putText(img,std::to_string(result.second.at(it->track_id).first)+':'+std::to_string(result.second.at(it->track_id).second),cv::Point(it->tlbr[0],it->tlbr[3]),1,1,cv::Scalar(0,255,0),1);
         }
-        if((mode&32)==32&&rec.isOpened())
+        if(mode[MODE_RECORD_PROC]&&rec.isOpened())
             rec.write(img);
-        if((mode&4)==4)
+        if(mode[MODE_DISPLAY])
         {
             if(!example_img.empty())
             {
@@ -447,7 +448,7 @@ int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::hikcam& cam, cv::Vi
                     cv::remap(img,tmp,map,cv::Mat(),INTER_LINEAR); //Cannot undistort in-place
                     img=std::move(tmp);
                 }
-                if((mode&1)==1)
+                if(mode[MODE_USE_CAR])
                 {
                     trtyolo::DetectRes inferred=rainfer.infer(img);
                     if(inferred.num>0)
@@ -458,7 +459,7 @@ int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::hikcam& cam, cv::Vi
                     running=false; //ESC to exit
                 old_timestamp=now;
             }
-            while(running&&(mode&64)==64&&cap.set(cv::CAP_PROP_POS_FRAMES,0));
+            while(running&&mode[MODE_LOOP]&&cap.set(cv::CAP_PROP_POS_FRAMES,0));
             std::cout<<"Video stopped"<<std::endl;
     }
     else if(cam.isopened())
@@ -486,7 +487,7 @@ int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::hikcam& cam, cv::Vi
                 else
                     img=std::move(tmp);
             }
-            if((mode&1)==1)
+            if(mode[MODE_USE_CAR])
             {
                 trtyolo::DetectRes inferred=rainfer.infer(img);
                 if(inferred.num>0)
@@ -524,7 +525,7 @@ int main(int argc, char** argv)
         args.printMessage();
         return 0;
     }
-    mode=args.get<unsigned>("m"),threads=args.get<size_t>("t"),wait_timeout=std::chrono::milliseconds(args.get<unsigned>("w"));
+    mode=std::bitset<8>(args.get<unsigned>("m")),threads=args.get<size_t>("t"),wait_timeout=std::chrono::milliseconds(args.get<unsigned>("w"));
     struct model_config model_config={args.get<uint32_t>("B"),args.get<std::string>("c"),args.get<std::string>("a"),args.has("n")?0:".engine",args.get<int>("tensor-width"),args.get<int>("tensor-height"),args.get<int>("b")};
     struct video_config video_config={args.get<unsigned>("V"),args.get<std::string>("@file"),args.get<unsigned>("V")!=0?args.get<unsigned>("@file"):0,args.get<float>("f"),args.get<float>("e"),args.get<float>("g"),args.get<std::string>("R"),args.get<std::string>("fourcc"),args.get<int>("q")};
     cv::Mat cam_matrix,dist_coeffs,example_img;
@@ -560,7 +561,7 @@ int main(int argc, char** argv)
         example_img=cv::imread(args.get<std::string>("I"));
         cv::resize(example_img,example_img,cv::Size(args.get<unsigned>("W")*args.get<float>("S"),args.get<unsigned>("H")*args.get<float>("S")));
     }
-    else if((mode&5)==5)
+    else if(mode[MODE_USE_CAR]&&mode[MODE_DISPLAY])
         example_img=cv::Mat::zeros(args.get<unsigned>("H")*args.get<float>("S"),args.get<unsigned>("W")*args.get<float>("S"),CV_8UC3);
     if(!args.check())
     {
@@ -568,7 +569,7 @@ int main(int argc, char** argv)
         return -1;
     }
     std::string car_engine,armor_engine;
-    std::cout<<"Global config: "<<std::endl<<"Mode: "<<static_cast<unsigned>(mode)<<" Threads: "<<threads<<" Timeout: "<<wait_timeout.count()<<"ms"<<std::endl;
+    std::cout<<"Global config: "<<std::endl<<"Mode: "<<mode.to_ulong()<<" Threads: "<<threads<<" Timeout: "<<wait_timeout.count()<<"ms"<<std::endl;
     //Part 2 Convert and prepare model (See convert.h)
     std::cout<<"Model config: "<<std::endl<<"Car file: "<<model_config.car_file<<" Armor file: "<<model_config.armor_file<<std::endl;
     if(model_config.save_ext)
@@ -585,7 +586,7 @@ int main(int argc, char** argv)
     std::cout<<"Camera matrix:\n"<<cam_matrix<<"\nDistortion coefficients:\n"<<dist_coeffs<<std::endl;
     //Part 3 Open serial port
     rm::msg msger; //Communicate with referee
-    if((mode&8)==8)
+    if(mode[MODE_SERIAL])
         if(rm::msg::serial_quick_setup(msger,args.get<std::string>("s").c_str()))
         {
             std::thread(&rm::msg::receive,&msger).detach();
@@ -594,7 +595,7 @@ int main(int argc, char** argv)
         else
         {
             std::cerr<<"Serial port is not available"<<std::endl;
-            mode&=~8;
+            mode[MODE_SERIAL]=0;
         }
     //Part 4.1 Open video
     cv::VideoCapture cap;
@@ -632,7 +633,7 @@ int main(int argc, char** argv)
         //Part 4.2 Apply config
         std::tuple<int,int,float> image_arg=apply_video_config(video_config,cap,cam,rec);
         //Part 4.3 Mark points (if not done)
-        if((std::get<0>(pose_points).empty()||std::get<1>(pose_points).empty())&&(mode&5)==5)
+        if((std::get<0>(pose_points).empty()||std::get<1>(pose_points).empty())&&mode[MODE_USE_CAR]&&mode[MODE_DISPLAY])
         {
             cv::Mat img;
             if(cam.isopened()&&cam.start()!=camera::hikcam::OK)
