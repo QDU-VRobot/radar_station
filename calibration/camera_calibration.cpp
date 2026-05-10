@@ -353,13 +353,12 @@ int main( int argc, char** argv )
 
     int i, nframes;
     bool writeExtrinsics, writePoints;
-    bool undistortImage = false;
+    bool undistortImage;
     int flags = 0;
     VideoCapture capture;
     camera::hikcam hikcam;
     camera::camera* cam=&hikcam;
     bool flipVertical;
-    bool showUndistorted;
     Source videotype = GENERIC;
     int delay;
     clock_t prevTimestamp = 0;
@@ -426,7 +425,7 @@ int main( int argc, char** argv )
     }
     if ( parser.has("o") )
         outputFilename = parser.get<string>("o");
-    showUndistorted = parser.has("su");
+    undistortImage = parser.has("su");
     if ( isdigit(parser.get<string>("@input_data")[0]) )
         cameraId = parser.get<int>("@input_data");
     inputFilename = parser.get<string>("@input_data");
@@ -524,9 +523,9 @@ int main( int argc, char** argv )
         else if( i < (int)imageList.size() )
             view = imread(imageList[i], IMREAD_COLOR);
 
-        if(view.empty())
+        if( view.empty() )
         {
-            if( imagePoints.size() > 0 )
+            if( imagePoints.size() > 0 && mode == CAPTURING )
                 runAndSave(outputFilename, imagePoints, imageSize,
                            boardSize, pattern, squareSize, grid_width, release_object, aspectRatio,
                flags, cameraMatrix, distCoeffs,
@@ -613,7 +612,14 @@ int main( int argc, char** argv )
         char key = (char)waitKey(capture.isOpened()||cam->isopened() ? 50 : 500);
 
         if( key == 27 )
+        {
+            if( imagePoints.size() > 0 && mode == CAPTURING )
+                runAndSave(outputFilename, imagePoints, imageSize,
+                           boardSize, pattern, squareSize, grid_width, release_object, aspectRatio,
+                           flags, cameraMatrix, distCoeffs,
+                           writeExtrinsics, writePoints, writeGrid);
             break;
+        }
 
         if( key == 'u' && mode == CALIBRATED )
             undistortImage = !undistortImage;
@@ -638,7 +644,7 @@ int main( int argc, char** argv )
         }
     }
 
-    if( !capture.isOpened() && !cam->isopened() && showUndistorted )
+    if( !capture.isOpened() && !cam->isopened() && undistortImage )
     {
         Mat view, rview, map1, map2;
         initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat(),
