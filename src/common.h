@@ -4,8 +4,11 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <chrono>
 #include "opencv2/core.hpp"
 #include "opencv2/videoio.hpp"
+#include "camera.h"
+#include "hikcamera.h"
 extern "C" //Just for shorter symbols :)
 {
 enum mode_flag : uint8_t {
@@ -40,6 +43,37 @@ inline size_t getsavename(char* savename, const char* pathname, const char* save
         strcpy(savename+savelen-extlen,saveext);
     }
     return savelen;
+}
+inline bool start_camera(camera::camera& cam)
+{
+    if(cam.isopened())
+    {
+        if(dynamic_cast<camera::hikcam*>(&cam))
+        {
+            if(cam.start()!=camera::hikcam::OK)
+            {
+                fprintf(stderr,"An error occurred while starting video [%d]\n",camera::hikcam::last_error);
+                return false;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+inline std::pair<cv::Mat,int64_t> grabMatTime(camera::camera& cam,unsigned int ms=-1)
+{
+    int64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if(dynamic_cast<camera::hikcam*>(&cam))
+    {
+        camera::hikcam::FRAME frame=std::any_cast<camera::hikcam::FRAME>(cam.grab(ms));
+        if(camera::hikcam::last_error==camera::hikcam::OK)
+        {
+            std::pair<cv::Mat,int64_t> ret=std::make_pair(cv::Mat(frame.stFrameInfo.nHeight,frame.stFrameInfo.nWidth,CV_8UC1,frame.pBufAddr).clone(),timestamp);
+            cam.free(frame);
+            return ret;
+        }
+    }
+    return std::make_pair(cv::Mat(),timestamp);
 }
 inline cv::Mat calculateCameraMatrix(cv::Size imgsize, double fov) //Returns an ideal camera matrix with a given FOV
 {

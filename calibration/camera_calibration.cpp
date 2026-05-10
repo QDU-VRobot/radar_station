@@ -357,7 +357,7 @@ int main( int argc, char** argv )
     int flags = 0;
     VideoCapture capture;
     camera::hikcam hikcam;
-    camera::camera<void*,void*,void*,void*>* cam=0;
+    camera::camera* cam=&hikcam;
     bool flipVertical;
     bool showUndistorted;
     Source videotype = GENERIC;
@@ -370,7 +370,7 @@ int main( int argc, char** argv )
     Pattern pattern = CHESSBOARD;
 
     cv::CommandLineParser parser(argc, argv,
-                                 "{help ||}{w||}{h||}{pt|chessboard|}{n|10|}{d|1000|}{s|1|}{o|out_camera_data.yml|}"
+                                 "{help ||}{w||}{h||}{pt|chessboard|}{n|10|}{d|1000|}{s|1|}{o|camera.yaml|}"
                                  "{op||}{oe||}{zt||}{a||}{p||}{v||}{V|generic|}{su||}"
                                  "{oo||}{ws|11|}{dt||}"
                                  "{fx||}{fy||}{cx||}{cy||}"
@@ -482,17 +482,11 @@ int main( int argc, char** argv )
         capture.open(inputFilename);
     else if( videotype == HIKCAMERA )
     {
-        camera::hikcam::CAMERA_INFO_LIST devlist=camera::hikcam::enum_cameras();
-        hikcam.open(devlist.pDeviceInfo[cameraId]);
-        union camera::hikset s;
-        s.eValue=0;
-        hikcam.set(camera::ENUM,"TriggerMode",s);
-        s.bValue=0;
-        hikcam.set(camera::BOOL,"AcquisitionFrameRateEnable",s);
-        s.eValue=2;
-        hikcam.set(camera::ENUM,"ExposureAuto",s);
-        hikcam.set(camera::ENUM,"GainAuto",s);
-        cam=reinterpret_cast<camera::camera<void*,void*,void*,void*>*>(&hikcam);
+        hikcam.open(cameraId);
+        hikcam.set("TriggerMode",0u);
+        hikcam.set("AcquisitionFrameRateEnable",false);
+        hikcam.set("ExposureAuto",2u);
+        hikcam.set("GainAuto",2u);
     }
     else
         capture.open(cameraId);
@@ -521,7 +515,7 @@ int main( int argc, char** argv )
         }
         else if( hikcam.isopened() )
         {
-            camera::hikcam::FRAME frame=hikcam.grab(-1);
+            camera::hikcam::FRAME frame=std::any_cast<camera::hikcam::FRAME>(hikcam.grab(5000));
             Mat view0(frame.stFrameInfo.nHeight,frame.stFrameInfo.nWidth,CV_8UC1,frame.pBufAddr);
             cvtColor(view0,view,COLOR_BayerBG2BGR);
             hikcam.free(frame);

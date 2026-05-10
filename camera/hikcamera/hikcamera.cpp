@@ -1,8 +1,13 @@
 #include "hikcamera.h"
+#include <typeinfo>
 #include <stdexcept>
 namespace camera
 {
     int hikcam::last_error=0;
+    hikcam::hikcam(size_t num):handle(0)
+    {
+        hikcam::open(num);
+    }
     hikcam::hikcam(const CAMERA_INFO* pstDevInfo):handle(0)
     {
         if(pstDevInfo)
@@ -10,19 +15,19 @@ namespace camera
     }
     hikcam::hikcam(const hikcam& cam):handle(0)
     {
-        *this=cam;
-    }
-    hikcam& hikcam::operator=(const hikcam& cam)
-    {
         if(cam.is_opened)
             throw std::runtime_error("Camera must be closed before copying");
-        destroy();
         if(cam.handle)
         {
             CAMERA_INFO info;
             if(MV_CC_GetDeviceInfo(cam.handle,&info)==MV_OK)
                 hikcam::open(&info);
         }
+    }
+    hikcam& hikcam::operator=(hikcam cam)
+    {
+        camera::operator=(cam);
+        std::swap(handle,cam.handle);
         return *this;
     }
     hikcam::CAMERA_INFO_LIST hikcam::enum_cameras(unsigned int nTLayerType)
@@ -31,6 +36,13 @@ namespace camera
         last_error=MV_CC_EnumDevices(nTLayerType,&pstDevList);
         return pstDevList;
     }
+    int hikcam::open(size_t num)
+    {
+        CAMERA_INFO_LIST devlist=enum_cameras(); //USB cameras must be enumerated before opening
+        if(devlist.nDeviceNum<=num)
+            throw std::runtime_error("Camera not found, check camera connection");
+        return open(devlist.pDeviceInfo[num]);
+    }
     int hikcam::open(const CAMERA_INFO* pstDevInfo)
     {
         unsigned int nAccessMode = MV_ACCESS_Control;
@@ -38,56 +50,47 @@ namespace camera
             is_opened=(last_error=MV_CC_OpenDevice(handle,nAccessMode))==MV_OK;
         return last_error;
     }
-    union hikget hikcam::get(enum datatype type,const char* strKey) const
+    std::any hikcam::get(enum datatype type,const char* key) const
     {
         union hikget value;
         switch(type)
         {
             case INT:
-                last_error=MV_CC_GetIntValueEx(handle,strKey,&value.stIntValue);
-                break;
+                last_error=MV_CC_GetIntValueEx(handle,key,&value.stIntValue);
+                return value.stIntValue;
             case ENUM:
-                last_error=MV_CC_GetEnumValue(handle,strKey,&value.stEnumValue);
-                break;
+                last_error=MV_CC_GetEnumValue(handle,key,&value.stEnumValue);
+                return value.stEnumValue;
             case FLOAT:
-                last_error=MV_CC_GetFloatValue(handle,strKey,&value.stFloatValue);
-                break;
+                last_error=MV_CC_GetFloatValue(handle,key,&value.stFloatValue);
+                return value.stFloatValue;
             case BOOL:
-                last_error=MV_CC_GetBoolValue(handle,strKey,&value.bValue);
-                break;
+                last_error=MV_CC_GetBoolValue(handle,key,&value.bValue);
+                return value.bValue;
             case STRING:
-                last_error=MV_CC_GetStringValue(handle,strKey,&value.stStringValue);
-                break;
+                last_error=MV_CC_GetStringValue(handle,key,&value.stStringValue);
+                return value.stStringValue;
             default:
                 throw std::range_error("Invalid type");
         }
-        return value;
     }
-    int hikcam::set(enum datatype type,const char* strKey,const union hikset& value)
+    int hikcam::set(const char* key, const std::any& value)
     {
-        switch(type)
-        {
-            case INT:
-                last_error=MV_CC_SetIntValueEx(handle,strKey,value.iValue);
-                break;
-            case ENUM:
-                last_error=MV_CC_SetEnumValue(handle,strKey,value.eValue);
-                break;
-            case FLOAT:
-                last_error=MV_CC_SetFloatValue(handle,strKey,value.fValue);
-                break;
-            case BOOL:
-                last_error=MV_CC_SetBoolValue(handle,strKey,value.bValue);
-                break;
-            case STRING:
-                last_error=MV_CC_SetStringValue(handle,strKey,value.strValue);
-                break;
-            case COMMAND:
-                last_error=MV_CC_SetCommandValue(handle,strKey);
-                break;
-            default:
-                return -1;
-        }
+        if(!value.has_value())
+            return last_error = MV_CC_SetCommandValue(handle, key);
+        const std::type_info& ti = value.type();
+        if(ti == typeid(int64_t))
+            last_error = MV_CC_SetIntValueEx(handle, key, std::any_cast<int64_t>(value));
+        else if(ti == typeid(unsigned int))
+            last_error = MV_CC_SetEnumValue(handle, key, std::any_cast<unsigned int>(value));
+        else if(ti == typeid(float))
+            last_error = MV_CC_SetFloatValue(handle, key, std::any_cast<float>(value));
+        else if(ti == typeid(bool))
+            last_error = MV_CC_SetBoolValue(handle, key, std::any_cast<bool>(value));
+        else if(ti == typeid(const char*))
+            last_error = MV_CC_SetStringValue(handle, key, std::any_cast<const char*>(value));
+        else
+            throw std::bad_any_cast();
         return last_error;
     }
     int hikcam::start(void)
@@ -98,15 +101,15 @@ namespace camera
     {
         return last_error=MV_CC_RegisterImageCallBackEx(handle,cbOutput,pUser);
     }
-    hikcam::FRAME hikcam::grab(unsigned int nMsec)
+    std::any hikcam::grab(unsigned int ms)
     {
         FRAME pstFrame;
-        last_error=MV_CC_GetImageBuffer(handle,&pstFrame,nMsec);
+        last_error=MV_CC_GetImageBuffer(handle,&pstFrame,ms);
         return pstFrame;
     }
-    int hikcam::free(FRAME& pstFrame)
+    int hikcam::free(std::any frame)
     {
-        return last_error=MV_CC_FreeImageBuffer(handle,&pstFrame);
+        return last_error=MV_CC_FreeImageBuffer(handle,&std::any_cast<FRAME&>(frame));
     }
     int hikcam::stop(void)
     {

@@ -22,15 +22,17 @@ namespace serial
     }
     terminal::terminal(const terminal& term):fd(-1)
     {
-        *this=term;
-    }
-    terminal& terminal::operator=(const terminal& term)
-    {
-        close();
         if(term.fd>=0)
             open(term.file,term.flag);
         else
             flag=term.flag,options=term.options,file=term.file;
+    }
+    terminal& terminal::operator=(terminal term)
+    {
+        std::swap(fd,term.fd);
+        std::swap(flag,term.flag);
+        std::swap(options,term.options);
+        std::swap(file,term.file);
         return *this;
     }
     int terminal::open(const std::string& filename,int oflag)

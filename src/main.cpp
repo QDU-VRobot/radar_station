@@ -29,14 +29,6 @@ struct video_config
     int quality; //-1=keep original
 };
 static const char* name[2]={"Video","Field"}; //Just for windows' name
-static inline int init_hikcamera(camera::hikcam& cam, uint8_t device_num)
-{
-    camera::hikcam::CAMERA_INFO_LIST devlist=camera::hikcam::enum_cameras(); //USB cameras must be enumerated before opening
-    if(devlist.nDeviceNum<=device_num)
-        throw std::runtime_error("Camera not found, check camera connection");
-    std::cerr<<"Using camera "<<static_cast<unsigned>(device_num)<<std::endl;
-    return cam.open(devlist.pDeviceInfo[device_num]);
-}
 std::bitset<8> mode;
 size_t threads,rm::inferer::threads; //For car_infer;
 std::chrono::milliseconds wait_timeout,rm::inferer::timeout; //Timeout for inferring to finish per cycle
@@ -49,7 +41,7 @@ static void handle_exit(int type) //Exit safely or the recorded video will corru
     signal(type,SIG_DFL); //Press again to force exit
 }
 
-static std::tuple<int,int,float> apply_video_config(const struct video_config& config, cv::VideoCapture& cap, camera::hikcam& cam, cv::VideoWriter& rec)
+static std::tuple<int,int,float> apply_video_config(const struct video_config& config, cv::VideoCapture& cap, camera::camera& cam, cv::VideoWriter& rec)
 {
     int width,height;
     float fps=0;
@@ -69,46 +61,31 @@ static std::tuple<int,int,float> apply_video_config(const struct video_config& c
     }
     if(cam.isopened())
     {
-        union camera::hikset s;
-        s.eValue=0;
-        cam.set(camera::ENUM,"TriggerMode",s);
-        if(config.fps!=0)
+        if(dynamic_cast<camera::hikcam*>(&cam))
         {
-            s.bValue=config.fps>0;
-            cam.set(camera::BOOL,"AcquisitionFrameRateEnable",s);
-            if(config.fps>0)
+            cam.set("TriggerMode",0u);
+            if(config.fps!=0)
             {
-                s.fValue=config.fps;
-                cam.set(camera::FLOAT,"AcquisitionFrameRate",s);
+                cam.set("AcquisitionFrameRateEnable",config.fps>0);
+                if(config.fps>0)
+                    cam.set("AcquisitionFrameRate",config.fps);
             }
-        }
-        if(config.exposure_time!=0)
-        {
-            s.eValue=config.exposure_time<0?2:0;
-            cam.set(camera::ENUM,"ExposureAuto",s);
-            if(config.exposure_time>0)
+            if(config.exposure_time!=0)
             {
-                s.fValue=config.exposure_time;
-                cam.set(camera::FLOAT,"ExposureTime",s);
+                cam.set("ExposureAuto",config.exposure_time<0?2u:0u);
+                if(config.exposure_time>0)
+                    cam.set("ExposureTime",config.exposure_time);
             }
-        }
-        if(config.gain!=0)
-        {
-            s.eValue=config.gain<0?2:0;
-            cam.set(camera::ENUM,"GainAuto",s);
-            if(config.gain>0)
+            if(config.gain!=0)
             {
-                s.fValue=config.gain;
-                cam.set(camera::FLOAT,"Gain",s);
+                cam.set("GainAuto",config.gain<0?2u:0u);
+                if(config.gain>0)
+                    cam.set("Gain",config.gain);
             }
+            width=std::any_cast<camera::hikcam::INT_VAL>(cam.get(camera::INT,"Width")).nCurValue;
+            height=std::any_cast<camera::hikcam::INT_VAL>(cam.get(camera::INT,"Height")).nCurValue;
+            fps=std::any_cast<camera::hikcam::FLOAT_VAL>(cam.get(camera::FLOAT,"ResultingFrameRate")).fCurValue;
         }
-        union camera::hikget g;
-        g=cam.get(camera::INT,"Width");
-        width=g.stIntValue.nCurValue;
-        g=cam.get(camera::INT,"Height");
-        height=g.stIntValue.nCurValue;
-        g=cam.get(camera::FLOAT,"ResultingFrameRate");
-        fps=g.stFloatValue.fCurValue;
     }
     if(config.record_file.size())
     {
@@ -137,7 +114,7 @@ struct mark_flag
 static void mark(int event, int x, int y, int flags, void *userdata)
 {
     static cv::Mat marked_img[2]; //Video, Minimap
-    std::tuple<struct mark_flag&,const cv::Mat&,void*,const unsigned int&,void*>& arg=*(reinterpret_cast<std::tuple<struct mark_flag&,const cv::Mat&,void*,const unsigned int&,void*>*>(userdata));
+    auto& arg=*(reinterpret_cast<std::tuple<struct mark_flag&,const cv::Mat&,void*,const unsigned int&,void*>*>(userdata));
     if(marked_img[std::get<0>(arg).type].empty()) //First call to this function
         std::get<1>(arg).copyTo(marked_img[std::get<0>(arg).type]);
     switch(event)
@@ -155,7 +132,7 @@ static void mark(int event, int x, int y, int flags, void *userdata)
                         reinterpret_cast<std::vector<cv::Point2f>*>(std::get<2>(arg))->push_back(point);
                     else if(std::get<0>(arg).type==1)
                         reinterpret_cast<std::vector<cv::Point3f>*>(std::get<2>(arg))->emplace_back(x,y,std::get<3>(arg)*0.01);
-                cv::circle(marked_img[std::get<0>(arg).type],point,2,cv::Scalar(0,255,0),cv::LineTypes::FILLED);
+                    cv::circle(marked_img[std::get<0>(arg).type],point,2,cv::Scalar(0,255,0),cv::LineTypes::FILLED);
                 break;
                 case 0: //Start another contour marking
                     if(std::get<0>(arg).type==0)
@@ -413,7 +390,7 @@ static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const
     }
     return -1;
 }
-int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::hikcam& cam, cv::VideoWriter& rec, rm::msg& msger, const std::tuple<int,int,float>& image_arg, const std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>,float>>>& pose_points, const cv::Mat& cam_matrix, const cv::Mat& dist_coeffs, const cv::Mat& example_img, float scale)
+int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::camera& cam, cv::VideoWriter& rec, rm::msg& msger, const std::tuple<int,int,float>& image_arg, const std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>,float>>>& pose_points, const cv::Mat& cam_matrix, const cv::Mat& dist_coeffs, const cv::Mat& example_img, float scale)
 {
     unsigned int err_counter=0;
     cv::Mat img,map,m1,m2;
@@ -464,24 +441,19 @@ int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::hikcam& cam, cv::Vi
     }
     else if(cam.isopened())
     {
-        if(cam.start()!=camera::hikcam::OK)
-        {
-            std::cerr<<"An error occurred while starting video ["<<camera::hikcam::last_error<<"]"<<std::endl;
-            if(cam.set(camera::COMMAND,"DeviceReset")==camera::hikcam::OK)
-                std::cerr<<"Reset command has been sent, please retry later"<<std::endl;
+        static int64_t old_timestamp;
+        int64_t time_delta;
+        if(!start_camera(cam))
             return 2;
-        }
-        camera::hikcam::FRAME frame;
         while(err_counter<MAX(2000/wait_timeout.count(),10000/std::get<2>(image_arg))&&running) //2s or 10 pictures
         {
-            frame=cam.grab(wait_timeout.count());
-            err_counter=camera::hikcam::last_error==camera::hikcam::OK?0:err_counter+1;
-            static int64_t old_timestamp=frame.stFrameInfo.nHostTimeStamp;
-            img=cv::Mat(frame.stFrameInfo.nHeight,frame.stFrameInfo.nWidth,CV_8UC1,frame.pBufAddr);
+            std::pair<cv::Mat,int64_t> frame=grabMatTime(cam,wait_timeout.count());
+            err_counter=frame.first.empty()?err_counter+1:0;
+            time_delta=frame.second-old_timestamp;
             if(!err_counter)
             {
                 cv::Mat tmp;
-                cv::cvtColor(img,tmp,cv::COLOR_BayerBG2RGB);
+                cv::cvtColor(frame.first,tmp,cv::COLOR_BayerBG2RGB);
                 if(!cam_matrix.empty())
                     cv::remap(tmp,img,map,cv::Mat(),INTER_LINEAR);
                 else
@@ -490,20 +462,19 @@ int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::hikcam& cam, cv::Vi
             if(mode[MODE_USE_CAR])
             {
                 trtyolo::DetectRes inferred=rainfer.infer(img);
-                if(inferred.num>0)
-                    result=rainfer.track(inferred,std::chrono::milliseconds(frame.stFrameInfo.nHostTimeStamp-old_timestamp));
+                if(inferred.num>0&&time_delta<1000)
+                    result=rainfer.track(inferred,std::chrono::milliseconds(time_delta));
             }
             if(!err_counter)
             {
-                std::cerr<<"Interval: "<<frame.stFrameInfo.nHostTimeStamp-old_timestamp<<"ms"<<std::endl;
+                std::cerr<<"Interval: "<<time_delta<<"ms"<<std::endl;
                 cv::cvtColor(img,img,cv::COLOR_RGB2BGR);
             }
-            if(output(img,result,m1,m2,std::get<2>(pose_points),rec,msger,example_img.clone(),scale,frame.stFrameInfo.nHostTimeStamp-old_timestamp)==27)
+            if(output(img,result,m1,m2,std::get<2>(pose_points),rec,msger,example_img.clone(),scale,time_delta)==27)
                 running=false; //ESC to exit
             if(!err_counter)
             {
-                old_timestamp=frame.stFrameInfo.nHostTimeStamp;
-                cam.free(frame);
+                old_timestamp+=time_delta;
             }
         }
         cam.stop();
@@ -599,7 +570,8 @@ int main(int argc, char** argv)
         }
     //Part 4.1 Open video
     cv::VideoCapture cap;
-    camera::hikcam cam;
+    camera::hikcam hikcam;
+    camera::camera* cam=&hikcam;
     switch(video_config.video_type)
     {
         case 0:
@@ -609,60 +581,50 @@ int main(int argc, char** argv)
             cap.open(video_config.video_device);
             break;
         case 2:
-            if(init_hikcamera(cam,video_config.video_device)!=camera::hikcam::OK&&!cam.get_handle())
+            if(hikcam.open(video_config.video_device)!=camera::hikcam::OK&&!hikcam.get_handle())
             {
                 std::cerr<<"Camera init failed! ["<<camera::hikcam::last_error<<"]"<<std::endl;
                 return 1;
             }
-            while(!cam.isopened()&&cam.open()!=camera::hikcam::OK)
+            while(!hikcam.isopened()&&hikcam.open()!=camera::hikcam::OK)
             {
                 std::cerr<<"Cannot open camera ["<<camera::hikcam::last_error<<"]"<<std::endl;
                 std::this_thread::sleep_for(std::chrono::seconds(1));
             }
-            std::cerr<<"Video handle: "<<cam.get_handle()<<std::endl;
+            std::cerr<<"Video handle: "<<hikcam.get_handle()<<std::endl;
             break;
         default:
             std::cerr<<"Wrong video type "<<static_cast<unsigned>(video_config.video_type)<<std::endl;
             return -1;
     }
-    if(!cap.isOpened()&&video_config.video_type!=2)
+    if(video_config.video_type<=1&&!cap.isOpened()||video_config.video_type>=2&&!cam->isopened())
         std::cerr<<"No video handle, check camera connection or filename"<<std::endl;
     else
     {
         cv::VideoWriter rec;
         //Part 4.2 Apply config
-        std::tuple<int,int,float> image_arg=apply_video_config(video_config,cap,cam,rec);
+        std::tuple<int,int,float> image_arg=apply_video_config(video_config,cap,*cam,rec);
         //Part 4.3 Mark points (if not done)
         if((std::get<0>(pose_points).empty()||std::get<1>(pose_points).empty())&&mode[MODE_USE_CAR]&&mode[MODE_DISPLAY])
         {
             cv::Mat img;
-            if(cam.isopened()&&cam.start()!=camera::hikcam::OK)
-            {
-                std::cerr<<"An error occurred while starting video ["<<camera::hikcam::last_error<<"]"<<std::endl;
+            if(cam->isopened()&&!start_camera(*cam))
                 return 2;
-            }
             std::cout<<"Press any key to mark points"<<std::endl;
             do //Find a best view to mark
             {
                 if(cap.isOpened())
                     cap.read(img);
-                else if(cam.isopened())
+                else if(cam->isopened())
                 {
-                    camera::hikcam::FRAME frame=cam.grab();
-                    if(camera::hikcam::last_error!=camera::hikcam::OK)
-                    {
-                        std::cerr<<"An error occurred while capturing video ["<<camera::hikcam::last_error<<"]"<<std::endl;
-                        break;
-                    }
-                    img=cv::Mat(frame.stFrameInfo.nHeight,frame.stFrameInfo.nWidth,CV_8UC1,frame.pBufAddr);
+                    img=grabMatTime(*cam).first;
                     if(!img.empty())
                         cv::cvtColor(img,img,cv::COLOR_BayerBG2BGR);
-                    cam.free(frame);
                 }
             }
             while(!img.empty()&&(cv::imshow(name[0],img),cv::waitKey(wait_timeout.count()*100)==-1));
-            if(cam.isopened())
-                cam.stop();
+            if(cam->isopened())
+                cam->stop();
             if(!img.empty())
             {
                 std::cerr<<"Marking field points"<<std::endl;
@@ -696,7 +658,7 @@ int main(int argc, char** argv)
         //Part 5 Read image, infer & Show
         rm::inferer::threads=threads>0?threads:std::thread::hardware_concurrency(),rm::inferer::timeout=video_config.video_device==0?std::chrono::milliseconds(0):wait_timeout;
         rm::inferer rainfer(model_config.save_ext?car_engine.c_str():model_config.car_file.c_str(),true,image_arg,model_config.save_ext?armor_engine.c_str():model_config.armor_file.c_str(),true);
-        ret=run(rainfer,cap,cam,rec,msger,image_arg,pose_points,cam_matrix,dist_coeffs,example_img,args.get<float>("S"));
+        ret=run(rainfer,cap,*cam,rec,msger,image_arg,pose_points,cam_matrix,dist_coeffs,example_img,args.get<float>("S"));
     }
     return ret;
 }
