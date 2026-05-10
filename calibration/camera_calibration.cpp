@@ -370,7 +370,7 @@ int main( int argc, char** argv )
     Pattern pattern = CHESSBOARD;
 
     cv::CommandLineParser parser(argc, argv,
-                                 "{help ||}{w||}{h||}{pt|chessboard|}{n|10|}{d|1000|}{s|1|}{o|camera.yaml|}"
+                                 "{help ||}{w||}{h||}{pt|chessboard|}{n|100|}{d|1000|}{s|1|}{o|camera.yaml|}"
                                  "{op||}{oe||}{zt||}{a||}{p||}{v||}{V|generic|}{su||}"
                                  "{oo||}{ws|11|}{dt||}"
                                  "{fx||}{fy||}{cx||}{cy||}"
@@ -517,7 +517,8 @@ int main( int argc, char** argv )
         {
             camera::hikcam::FRAME frame=std::any_cast<camera::hikcam::FRAME>(hikcam.grab(5000));
             Mat view0(frame.stFrameInfo.nHeight,frame.stFrameInfo.nWidth,CV_8UC1,frame.pBufAddr);
-            cvtColor(view0,view,COLOR_BayerBG2BGR);
+            if(!view0.empty())
+                cvtColor(view0,view,COLOR_BayerBG2BGR);
             hikcam.free(frame);
         }
         else if( i < (int)imageList.size() )
