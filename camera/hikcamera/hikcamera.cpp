@@ -32,7 +32,7 @@ namespace camera
     }
     hikcam::CAMERA_INFO_LIST hikcam::enum_cameras(unsigned int nTLayerType)
     {
-        MV_CC_DEVICE_INFO_LIST pstDevList={0};
+        CAMERA_INFO_LIST pstDevList={0};
         last_error=MV_CC_EnumDevices(nTLayerType,&pstDevList);
         return pstDevList;
     }
@@ -97,7 +97,7 @@ namespace camera
     {
         return last_error=MV_CC_StartGrabbing(handle);
     }
-    int hikcam::grab_callback(void(cbOutput)(unsigned char * pData, FRAME_INFO* pFrameInfo, void* pUser),void* pUser)
+    int hikcam::grab_callback(void __stdcall (*cbOutput)(unsigned char * pData, FRAME_INFO* pFrameInfo, void* pUser),void* pUser)
     {
         return last_error=MV_CC_RegisterImageCallBackEx(handle,cbOutput,pUser);
     }

@@ -37,14 +37,11 @@ namespace camera
         hikcam(hikcam&& cam)=default;
         int open(size_t num);
         int open(const CAMERA_INFO* pstDevInfo=0);
-        inline void* get_handle(void) const
-        {
-            return handle;
-        }
+        inline void* get_handle(void) const {return handle;}
         std::any get(enum datatype type,const char* key) const;
         int set(const char* key,const std::any& value=0);
         int start(void);
-        int grab_callback(void(cbOutput)(unsigned char * pData, FRAME_INFO* pFrameInfo, void* pUser),void* pUser=0);
+        int grab_callback(void __stdcall (*cbOutput)(unsigned char * pData, FRAME_INFO* pFrameInfo, void* pUser),void* pUser=0);
         std::any grab(unsigned int ms=-1); //Return FRAME
         int free(std::any frame);
         int stop(void);

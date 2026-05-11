@@ -9,6 +9,7 @@
 #include "opencv2/videoio.hpp"
 #include "camera.h"
 #include "hikcamera.h"
+#include "irayple.h"
 extern "C" //Just for shorter symbols :)
 {
 enum mode_flag : uint8_t {
@@ -57,6 +58,15 @@ inline bool start_camera(camera::camera& cam)
             }
             return true;
         }
+        else if(dynamic_cast<camera::irayple*>(&cam))
+        {
+            if(cam.start()!=camera::irayple::OK)
+            {
+                fprintf(stderr,"An error occurred while starting video [%d]\n",camera::irayple::last_error);
+                return false;
+            }
+            return true;
+        }
     }
     return false;
 }
@@ -69,6 +79,16 @@ inline std::pair<cv::Mat,int64_t> grabMatTime(camera::camera& cam,unsigned int m
         if(camera::hikcam::last_error==camera::hikcam::OK)
         {
             std::pair<cv::Mat,int64_t> ret=std::make_pair(cv::Mat(frame.stFrameInfo.nHeight,frame.stFrameInfo.nWidth,CV_8UC1,frame.pBufAddr).clone(),timestamp);
+            cam.free(frame);
+            return ret;
+        }
+    }
+    else if(dynamic_cast<camera::irayple*>(&cam))
+    {
+        camera::irayple::FRAME frame=std::any_cast<camera::irayple::FRAME>(cam.grab(ms));
+        if(camera::irayple::last_error==camera::irayple::OK)
+        {
+            std::pair<cv::Mat,int64_t> ret=std::make_pair(cv::Mat(frame.frameInfo.height,frame.frameInfo.width,CV_8UC1,frame.pData).clone(),timestamp);
             cam.free(frame);
             return ret;
         }

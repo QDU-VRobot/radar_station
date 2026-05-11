@@ -13,15 +13,17 @@ option(BUILD_SHARED_LIBS "build shared libraries" ON)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 find_package(MVS REQUIRED)
+find_package(MVviewer REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_NAME}_SOURCE)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/hikcamera hikcamera_SOURCE)
-add_library(${PROJECT_NAME} ${${PROJECT_NAME}_SOURCE} ${hikcamera_SOURCE})
-target_include_directories(${PROJECT_NAME} PUBLIC ${MVS_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/hikcamera)
-target_link_libraries(${PROJECT_NAME} ${MVS_LIBS})
+aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/irayple irayple_SOURCE)
+add_library(${PROJECT_NAME} ${${PROJECT_NAME}_SOURCE} ${hikcamera_SOURCE} ${irayple_SOURCE})
+target_include_directories(${PROJECT_NAME} PUBLIC ${MVS_INCLUDE_DIRS} ${MVviewer_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/hikcamera ${CMAKE_CURRENT_SOURCE_DIR}/irayple)
+target_link_libraries(${PROJECT_NAME} ${MVS_LIBS} ${MVviewer_LIBS})
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(${PROJECT_NAME} PRIVATE -D_FORTIFY_SOURCE=2)

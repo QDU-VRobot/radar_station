@@ -5,6 +5,7 @@
 #include "opencv2/videoio.hpp"
 #include "opencv2/highgui.hpp"
 #include "hikcamera.h"
+#include "irayple.h"
 
 #include <cctype>
 #include <stdio.h>
@@ -65,7 +66,7 @@ static void help(char** argv)
     "     [-a=<aspectRatio>]       # fix aspect ratio (fx/fy)\n"
     "     [-p]                     # fix the principal point at the center\n"
     "     [-v]                     # flip the captured images around the horizontal axis\n"
-    "     [-V=<source>]            # video source type: generic (default), hikcamera, video or image\n"
+    "     [-V=<source>]            # video source type: generic (default), hikcamera, irayple, video or image\n"
     "     [-su]                    # show undistorted images after calibration\n"
     "     [-ws=<number_of_pixel>]  # half of search window for cornerSubPix (11 by default)\n"
     "     [-fx=<X focal length>]   # focal length in X-dir as an initial intrinsic guess (if this flag is used, fx, fy, cx, cy must be set)\n"
@@ -90,7 +91,7 @@ static void help(char** argv)
 
 enum { DETECTION = 0, CAPTURING = 1, CALIBRATED = 2 };
 enum Pattern { CHESSBOARD, CIRCLES_GRID, ASYMMETRIC_CIRCLES_GRID };
-enum Source { GENERIC, HIKCAMERA, VIDEO, IMAGE};
+enum Source { GENERIC, HIKCAMERA, IRAYPLE, VIDEO, IMAGE};
 
 static double computeReprojectionErrors(
     const vector<vector<Point3f> >& objectPoints,
@@ -357,6 +358,7 @@ int main( int argc, char** argv )
     int flags = 0;
     VideoCapture capture;
     camera::hikcam hikcam;
+    camera::irayple irayple;
     camera::camera* cam=&hikcam;
     bool flipVertical;
     Source videotype = GENERIC;
@@ -416,12 +418,14 @@ int main( int argc, char** argv )
             videotype = GENERIC;
         else if( val == "hikcamera" )
             videotype = HIKCAMERA;
+        else if( val == "irayple" )
+            videotype = IRAYPLE;
         else if( val == "video" )
             videotype = VIDEO;
         else if( val == "image" )
             videotype = IMAGE;
         else
-            return fprintf( stderr, "Invalid video type: must be generic, hikcamera, video or image\n" ), -1;
+            return fprintf( stderr, "Invalid video type: must be generic, hikcamera, irayple, video or image\n" ), -1;
     }
     if ( parser.has("o") )
         outputFilename = parser.get<string>("o");
@@ -487,6 +491,16 @@ int main( int argc, char** argv )
         hikcam.set("ExposureAuto",2u);
         hikcam.set("GainAuto",2u);
     }
+    else if( videotype == IRAYPLE )
+    {
+        irayple.open(cameraId);
+        irayple.set("TriggerMode",(uint64_t)0);
+        irayple.set("AcquisitionFrameRateEnable",false);
+        irayple.set("ExposureAuto",(uint64_t)2);
+        irayple.set("GainRaw",16.);
+        irayple.set("GainAuto",(uint64_t)2);
+        cam=&irayple;
+    }
     else
         capture.open(cameraId);
 
@@ -519,6 +533,14 @@ int main( int argc, char** argv )
             if(!view0.empty())
                 cvtColor(view0,view,COLOR_BayerBG2BGR);
             hikcam.free(frame);
+        }
+        else if( irayple.isopened() )
+        {
+            camera::irayple::FRAME frame=std::any_cast<camera::irayple::FRAME>(irayple.grab(5000));
+            Mat view0(frame.frameInfo.height,frame.frameInfo.width,CV_8UC1,frame.pData);
+            if(!view0.empty())
+                cvtColor(view0,view,COLOR_BayerBG2BGR);
+            irayple.free(frame);
         }
         else if( i < (int)imageList.size() )
             view = imread(imageList[i], IMREAD_COLOR);
