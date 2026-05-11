@@ -59,8 +59,8 @@ typedef enum fp_t { FP_1 = 1, FP_2 = 2, FP_DYNAMIC = 3 } fp_t;
 extern "C" {
 #endif
 extern int_t lapjv_internal(
-	const uint_t n, cost_t *cost[],
-	int_t *x, int_t *y);
+    const uint_t n, cost_t *cost[],
+    int_t *x, int_t *y);
 #ifdef __cplusplus
 }
 #endif

@@ -6,4 +6,5 @@ MvSdkLog/
 .vscode/
 .history/
 .cache/
-config.yml
+config.yaml
+camera.yaml
