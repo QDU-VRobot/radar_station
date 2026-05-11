@@ -103,7 +103,7 @@ namespace camera
     }
     std::any hikcam::grab(unsigned int ms)
     {
-        FRAME pstFrame;
+        FRAME pstFrame={0};
         last_error=MV_CC_GetImageBuffer(handle,&pstFrame,ms);
         return pstFrame;
     }

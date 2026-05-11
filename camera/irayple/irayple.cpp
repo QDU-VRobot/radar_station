@@ -103,7 +103,7 @@ namespace camera
     }
     std::any irayple::grab(unsigned int ms)
     {
-        FRAME frame;
+        FRAME frame={0};
         last_error = IMV_GetFrame(handle, &frame, ms);
         return frame;
     }
