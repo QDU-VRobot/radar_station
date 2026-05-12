@@ -476,7 +476,7 @@ int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::camera& cam, cv::Vi
         int64_t time_delta;
         if(!start_camera(cam))
             return 2;
-        while(err_counter<MAX(2000/wait_timeout.count(),10000/std::get<2>(image_arg))&&running) //2s or 10 pictures
+        while(err_counter<std::max(2000/(float)wait_timeout.count(),10000/std::get<2>(image_arg))&&running) //2s or 10 pictures
         {
             std::pair<cv::Mat,int64_t> frame=grabMatTime(cam,wait_timeout.count());
             err_counter=frame.first.empty()?err_counter+1:0;
