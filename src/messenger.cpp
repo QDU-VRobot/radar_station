@@ -40,6 +40,8 @@ namespace rm
         port.options.c_iflag&=~(BRKINT|ICRNL|INPCK|ISTRIP|IXON);
         port.options.c_oflag&=~OPOST;
         port.options.c_lflag&=~(ICANON|ECHO|ISIG);
+        port.options.c_cc[VMIN] = 1;
+        port.options.c_cc[VTIME] = 0;
         return port.apply_options()==0;
     }
     void msg::referee_callback(void)
@@ -223,6 +225,7 @@ namespace rm
         fprintf(stderr,"Sending data: ");
         for(size_t i=0;i<buf_len;++i)
             fprintf(stderr,"%02hhx ",buf.data[i]);
+        fprintf(stderr,"\n");
         #endif
         return write_wCRC16(&buf.data,buf_len)==static_cast<ssize_t>(buf_len);
     }
@@ -255,7 +258,7 @@ namespace rm
                     //Send pos
                     union both_map_robot buf;
                     for(size_t i=0;i<sizeof(pos)/sizeof(float);++i)
-                        buf.data[i]=MAX(pos.data[i],0)*100; //Convert unit (m->cm) and ensure not overflow
+                        buf.data[i]=std::max(pos.data[i],0.f)*100; //Convert unit (m->cm) and ensure not overflow
                     if(referee_send(0x0305,sizeof(buf),&buf))
                     {
                         #ifndef NDEBUG
@@ -270,7 +273,7 @@ namespace rm
                 if(serial_info.game_progress==4&&(serial_info.vulnerability>0||serial_info.encrypt_changeable||password_retries>0))
                 {
                     //Send cmd
-                    struct robot_interaction_data buf={{0x0121,serial_info.robot_id,0x8080},{{MIN(vulnerated,cmd)}}};
+                    struct robot_interaction_data buf={{0x0121,serial_info.robot_id,0x8080},{{std::min(vulnerated,cmd)}}};
                     if(buf.cmd.password_cmd=(password_retries>0?2:0))
                         memcpy(&buf.cmd.password,&guessed_password,sizeof(guessed_password)),--password_retries;
                     else if(buf.cmd.password_cmd=serial_info.encrypt_changeable)
