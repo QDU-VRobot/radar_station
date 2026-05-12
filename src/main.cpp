@@ -110,7 +110,7 @@ static std::tuple<int,int,float> apply_video_config(const struct video_config& c
             }
             width=std::any_cast<int64_t>(cam.get(camera::INT,"Width"));
             height=std::any_cast<int64_t>(cam.get(camera::INT,"Height"));
-            fps=std::any_cast<double>(cam.get(camera::FLOAT,"ResultingFrameRate"));
+            fps=std::any_cast<double>(cam.get(camera::FLOAT,"ResultingFrameRateAbs"));
         }
     }
     if(config.record_file.size())
