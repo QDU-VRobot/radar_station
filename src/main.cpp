@@ -32,7 +32,7 @@ struct video_config
 static const char* name[2]={"Video","Field"}; //Just for windows' name
 std::bitset<8> mode;
 size_t threads,rm::inferer::threads; //For car_infer;
-std::chrono::milliseconds wait_timeout,rm::inferer::timeout; //Timeout for inferring to finish per cycle
+std::chrono::milliseconds wait_timeout,rm::inferer::timeout,rm::msg::interval; //Timeout for inferring to finish per cycle
 std::vector<std::vector<uint8_t>> rm::msg::robot_classes={{0,1,2,3,254,5},{6,7,8,9,254,11}}; //{Blue{123467},Red{123467}}, Configurable
 static bool running=true;
 static void handle_exit(int type) //Exit safely or the recorded video will corrupt!
@@ -586,17 +586,12 @@ int main(int argc, char** argv)
     std::cout<<"Camera matrix:\n"<<cam_matrix<<"\nDistortion coefficients:\n"<<dist_coeffs<<std::endl;
     //Part 3 Open serial port
     rm::msg msger; //Communicate with referee
-    if(mode[MODE_SERIAL])
-        if(rm::msg::serial_quick_setup(msger,args.get<std::string>("s").c_str()))
-        {
-            std::thread(&rm::msg::receive,&msger).detach();
-            std::thread(&rm::msg::poll,&msger).detach(); //Use a new thread for a blocking task
-        }
-        else
-        {
-            std::cerr<<"Serial port is not available"<<std::endl;
-            mode[MODE_SERIAL]=0;
-        }
+    rm::msg::interval=wait_timeout;
+    if(mode[MODE_SERIAL]&&!msger.run(args.get<std::string>("s").c_str()))
+    {
+        std::cerr<<"Serial port is not available"<<std::endl;
+        mode[MODE_SERIAL]=0;
+    }
     //Part 4.1 Open video
     cv::VideoCapture cap;
     camera::hikcam hikcam;

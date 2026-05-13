@@ -42,10 +42,10 @@ namespace rm
         std::vector<STrack> tracked;
         std::map<int,std::pair<uint8_t,float>> track_labels;
         inferer(const char* car_engine=0, bool car_BGR=true, const std::tuple<int,int,float>& image_arg=std::make_tuple(0, 0, 0), const char* armor_engine=0, bool armor_BGR=true);
-        #if __cplusplus >= 201103L
         inferer(const inferer&)=delete; //Prevents pointer problems
         inferer& operator=(const inferer&)=delete;
-        #endif
+        inferer(inferer&&)=default;
+        inferer& operator=(inferer&&)=default;
         trtyolo::DetectRes infer(const cv::Mat& img);
         std::pair<const std::vector<STrack>, const std::map<int, std::pair<uint8_t, float>>> track(const trtyolo::DetectRes& inferred, std::chrono::milliseconds delay);
     };
