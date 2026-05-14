@@ -14,7 +14,7 @@ namespace rm
     std::vector<uint8_t> msg::generate_password(size_t len)
     {
         static const uint8_t hard_bytes[] = {
-            0xA5, 0x5A, 0x55, 0xAA, 0xF0, 0x0F, 0xCC, 0x33, 0xFF, 0x00,
+            0x5A, 0x55, 0x33, 0x30, 0x6F
         };
         static std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
         static std::uniform_int_distribution<size_t> dist(0, std::size(hard_bytes) - 1);
@@ -279,7 +279,7 @@ namespace rm
                     else if(buf.cmd.password_cmd=serial_info.encrypt_changeable)
                     {
                         std::vector<uint8_t> pwd=generate_password(6);
-                        memcpy(&buf.cmd.password,&pwd,pwd.size());
+                        memcpy(&buf.cmd.password,pwd.data(),pwd.size());
                     }
                     if(referee_send(0x0301,sizeof(buf.header)+sizeof(buf.cmd),&buf))
                     {
