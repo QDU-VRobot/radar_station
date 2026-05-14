@@ -3,8 +3,9 @@
 
 #include "serial.h"
 #include <chrono>
-#include <cstdint>
+#include <stdint.h>
 #include <vector>
+#include <thread>
 #include "opencv2/core.hpp"
 #define MAX_BUF 256
 namespace rm
@@ -193,9 +194,13 @@ namespace rm
         volatile uint8_t cmd;
         uint8_t seq;
         void referee_callback(void);
+        void receive(void);
+        void poll(void);
+        std::thread rx,tx;
     public:
         using timer=std::chrono::steady_clock;
         static std::vector<std::vector<uint8_t>> robot_classes; //HERO=0,ENGINEER,INFANTRY3,INFANTRY4,INFANTRY5,SENTRY
+        static std::chrono::milliseconds interval;
         volatile struct serial_info serial_info;
         std::pair<std::vector<cv::Point2f>, std::vector<uint8_t>> pos_from_camera;
         volatile union both_robot_pos pos_from_sentry;
@@ -206,11 +211,16 @@ namespace rm
         volatile uint8_t vulnerated; //Double vulnerability trigger
         msg():timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),pos_cache{0},guessed_password{0},password_retries(0),vulnerated(0){}
         msg(serial::terminal&& s):serial::terminal(s),timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),pos_cache{0},guessed_password{0},password_retries(0),vulnerated(0){}
+        msg(const msg&)=delete; //Prevents thread problems
+        msg& operator=(const msg&)=delete;
+        msg(msg&&)=default;
+        msg& operator=(msg&&)=default;
         static bool serial_quick_setup(serial::terminal& port, const char* filename=0);
         static std::vector<uint8_t> generate_password(size_t len);
-        void receive(void);
         bool referee_send(uint16_t cmd_id, uint16_t data_length, const void* data);
-        void poll(void);
+        bool run(const char* filename=0);
+        void stop(void);
+        ~msg();
     };
 }
 

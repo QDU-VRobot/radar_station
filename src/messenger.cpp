@@ -1,7 +1,6 @@
 #include "messenger.h"
 #include "serial.h"
 #include "RM_CRC.h"
-#include <cstdint>
 #include <string.h>
 #include <stdio.h>
 #include <algorithm>
@@ -237,6 +236,7 @@ namespace rm
         {
             uint8_t team=serial_info.robot_id/100;
             union both_robot_pos pos={.data={0}};
+            timer::time_point target=timer::now()+interval;
             if(timer::now()>timestamp[0])
             {
                 size_t count=0;
@@ -309,6 +309,26 @@ namespace rm
                     timestamp[2]+=std::chrono::milliseconds(50);
                 }
             }
+            if(timer::now()<target)
+                std::this_thread::sleep_for(target-timer::now());
         }
+    }
+    bool msg::run(const char* filename)
+    {
+        if(get_fd()<0&&!serial_quick_setup(*this,filename))
+            return false;
+        return rx=std::thread(&rm::msg::receive,this),tx=std::thread(&rm::msg::poll,this),true;
+    }
+    void msg::stop(void)
+    {
+        close();
+        if(tx.joinable())
+            tx.join();
+        if(rx.joinable())
+            rx.join();
+    }
+    msg::~msg()
+    {
+        stop();
     }
 }
