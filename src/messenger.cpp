@@ -142,14 +142,14 @@ namespace rm
                 printf("\n");
                 switch(recv_buf.robot_interaction_data.header.data_cmd_id)
                 {
-                    case 0x0279: //Receive pos from sentry
-                        for(size_t i=0;i<12;++i)
-                            if(pos_cache[i]>=0&&recv_buf.robot_interaction_data.robot_pos.data[i*2]>0&&recv_buf.robot_interaction_data.robot_pos.data[i*2+1]>0)
+                    case 0x0279: //Receive ally pos from sentry
+                        for(size_t i=0;i<6;++i)
+                            if(pos_cache[i+6]>=0&&recv_buf.robot_interaction_data.robot_pos.data[i*2]>0&&recv_buf.robot_interaction_data.robot_pos.data[i*2+1]>0)
                             {
-                                pos_cache[i]=0; //Make sure the pos being modified is not used
+                                pos_cache[i+6]=0; //Make sure the pos being modified is not used
                                 printf("Robot position updated (%zu)\n",i);
-                                pos_from_sentry.data[i*2]=recv_buf.robot_interaction_data.robot_pos.data[i*2],pos_from_sentry.data[i*2+1]=recv_buf.robot_interaction_data.robot_pos.data[i*2+1];
-                                pos_cache[i]=20; //Override radar's pos for 2 secs
+                                pos_from_sentry.data[(i+6)*2]=recv_buf.robot_interaction_data.robot_pos.data[i*2],pos_from_sentry.data[(i+6)*2+1]=recv_buf.robot_interaction_data.robot_pos.data[i*2+1];
+                                pos_cache[i+6]=20; //Override radar's pos for 2 secs
                             }
                     break;
                 }
@@ -300,7 +300,7 @@ namespace rm
             if(timer::now()>timestamp[2])
             {
                 struct robot_interaction_data buf={{0x0297,serial_info.robot_id,team*100+7}};
-                memcpy(&buf.robot_pos,&pos,sizeof(pos));
+                memcpy(&buf.robot_pos,&pos.opponent,sizeof(pos.opponent));
                 if(referee_send(0x0301,sizeof(buf.header)+sizeof(buf.robot_pos),&buf))
                 {
                     #ifndef NDEBUG

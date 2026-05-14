@@ -146,7 +146,7 @@ namespace rm
                 uint8_t password_cmd;
                 uint8_t password[6];
             } cmd;
-            union both_robot_pos robot_pos;
+            union robot_pos robot_pos;
         };
     };
     union frame
