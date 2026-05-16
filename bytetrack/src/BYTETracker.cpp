@@ -1,15 +1,16 @@
 #include "BYTETracker.h"
 #include <fstream>
 
-BYTETracker::BYTETracker(int frame_rate, int track_buffer)
+BYTETracker::BYTETracker(int frame_rate, int track_buffer, bool return_lost, float high_thresh)
 {
     track_thresh = 0.5;
-    high_thresh = 0.6;
+    this->high_thresh = high_thresh;
     match_thresh = 0.8;
 
     frame_id = 0;
     max_time_lost = frame_rate * track_buffer / 30;
-    cout << "Init ByteTrack!" << endl;
+    this->return_lost = return_lost;
+    cout << "Init ByteTrack! high_thresh=" << this->high_thresh << endl;
 }
 
 vector<STrack> BYTETracker::update(const vector<Object>& objects)
@@ -177,7 +178,13 @@ vector<STrack> BYTETracker::update(const vector<Object>& objects)
     {
         STrack *track = &detections[u_detection[i]];
         if (track->score < this->high_thresh)
+        {
+            if (this->return_lost)
+            {
+                output_stracks.push_back(detections[u_detection[i]]);
+            }
             continue;
+        }
         track->activate(this->kalman_filter, this->frame_id);
         activated_stracks.push_back(*track);
     }
@@ -233,5 +240,10 @@ vector<STrack> BYTETracker::update(const vector<Object>& objects)
             output_stracks.push_back(this->tracked_stracks[i]);
         }
     }
+    if(this->return_lost)
+        for (int i = 0; i < this->lost_stracks.size(); i++)
+        {
+            output_stracks.push_back(this->lost_stracks[i]);
+        }
     return output_stracks;
 }

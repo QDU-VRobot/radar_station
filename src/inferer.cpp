@@ -66,7 +66,7 @@ namespace rm
         }
         car_it=car_model_pool.begin();
         if(std::get<2>(image_arg))
-            tracker=std::make_unique<BYTETracker>(std::get<2>(image_arg), std::get<2>(image_arg));
+            tracker=std::make_unique<BYTETracker>(std::get<2>(image_arg), std::get<2>(image_arg), true);
         if(armor_engine&&armor_engine[0])
         {
             trtyolo::InferOption armor_option;
