@@ -39,8 +39,8 @@ namespace rm
         port.options.c_iflag&=~(BRKINT|ICRNL|INPCK|ISTRIP|IXON);
         port.options.c_oflag&=~OPOST;
         port.options.c_lflag&=~(ICANON|ECHO|ISIG);
-        port.options.c_cc[VMIN] = 1;
-        port.options.c_cc[VTIME] = 0;
+        port.options.c_cc[VMIN] = 32;
+        port.options.c_cc[VTIME] = 2;
         return port.apply_options()==0;
     }
     void msg::referee_callback(void)
@@ -171,6 +171,8 @@ namespace rm
                 state=read(&recv_buf.header,1); //Read SOF
                 if(state<0)
                     break;
+                else if(state==0)
+                    continue;
                 if(recv_buf.header.SOF!=0xA5)
                 {
                     #ifndef NDEBUG
@@ -179,11 +181,13 @@ namespace rm
                     continue;
                 }
                 state=read_wCRC8(&recv_buf.header,sizeof(recv_buf.header),1); //Read the rest of header
-                if(state!=0&&state<static_cast<ssize_t>(sizeof(recv_buf.header)-1)) //Read failed
+                if(state<0)
                     break;
+                else if((state-=static_cast<ssize_t>(sizeof(recv_buf.header)-1))<0) //Read failed
+                    continue;
                 if(recv_buf.header.data_length>MAX_BUF-(sizeof(recv_buf.header)+sizeof(recv_buf.cmd_id)+sizeof(frame_tail)))
                     recv_buf.header.data_length=0; //Prevent overflow
-                if(state||!recv_buf.header.data_length)
+                if(!state||!recv_buf.header.data_length)
                 {
                     read(&recv_buf.data,sizeof(recv_buf.cmd_id)+recv_buf.header.data_length+sizeof(frame_tail)); //Skip wrong data
                     continue;
@@ -195,9 +199,11 @@ namespace rm
                 fprintf(stderr,"\n");
                 #endif
                 state=read_wCRC16(&recv_buf.data,sizeof(recv_buf.header)+sizeof(recv_buf.cmd_id)+recv_buf.header.data_length+sizeof(frame_tail),sizeof(recv_buf.header));
-                if(state!=0&&state<static_cast<ssize_t>(sizeof(recv_buf.cmd_id)+recv_buf.header.data_length+sizeof(frame_tail)))
+                if(state<0)
                     break;
-                if(state)
+                else if((state-=static_cast<ssize_t>(sizeof(recv_buf.cmd_id)+recv_buf.header.data_length+sizeof(frame_tail)))<0)
+                    continue;
+                if(!state)
                 {
                     #ifndef NDEBUG
                     fprintf(stderr,"Received a wrong packet, cmd_id: 0x%04hx\n",recv_buf.cmd_id);

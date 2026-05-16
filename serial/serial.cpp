@@ -76,7 +76,8 @@ namespace serial
                     perror(errors[4]);
                 else
                     fputs(errors[4],stderr),fputs("\n",stderr);
-                return ncount?ncount:-1;
+                return ncount?ncount:status;
+
             }
         return ncount;
     }
@@ -87,13 +88,14 @@ namespace serial
     }
     ssize_t terminal::read_wCRC8(void* data,size_t count,size_t offset)
     {
-        int status=read(reinterpret_cast<unsigned char*>(data)+offset,count-offset);
-        if(status<static_cast<int>(count-offset))
-            return status;
-        if(Verify_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(data),count))
-            status=0;
-        else
-            fputs(errors[5],stderr);
+        ssize_t status=read(reinterpret_cast<unsigned char*>(data)+offset,count-offset);
+        if(status==static_cast<ssize_t>(count-offset))
+        {
+            if(Verify_CRC8_Check_Sum(reinterpret_cast<unsigned char*>(data),count))
+                ++status;
+            else
+                fputs(errors[5],stderr);
+        }
         return status;
     }
     ssize_t terminal::write_wCRC16(void* data,size_t count,size_t offset)
@@ -103,13 +105,14 @@ namespace serial
     }
     ssize_t terminal::read_wCRC16(void* data,size_t count,size_t offset)
     {
-        int status=read(reinterpret_cast<unsigned char*>(data)+offset,count-offset);
-        if(status<static_cast<int>(count-offset))
-            return status;
-        if(Verify_CRC16_Check_Sum(reinterpret_cast<unsigned char*>(data),count))
-            status=0;
-        else
-            fputs(errors[6],stderr);
+        ssize_t status=read(reinterpret_cast<unsigned char*>(data)+offset,count-offset);
+        if(status==static_cast<ssize_t>(count-offset))
+        {
+            if(Verify_CRC16_Check_Sum(reinterpret_cast<unsigned char*>(data),count))
+                ++status;
+            else
+                fputs(errors[6],stderr);
+        }
         return status;
     }
     int terminal::apply_options(int mode)
