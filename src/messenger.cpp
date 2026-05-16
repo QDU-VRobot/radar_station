@@ -305,14 +305,17 @@ namespace rm
             }
             if(timer::now()>timestamp[2])
             {
-                struct robot_interaction_data buf={{0x0297,serial_info.robot_id,team*100+7}};
-                memcpy(&buf.robot_pos,&pos.opponent,sizeof(pos.opponent));
-                if(referee_send(0x0301,sizeof(buf.header)+sizeof(buf.robot_pos),&buf))
+                if(std::any_of(pos.opponent.data,pos.opponent.data+12,[](float x){return x!=0;}))
                 {
-                    #ifndef NDEBUG
-                    fprintf(stderr,"Sent data to robot\n");
-                    #endif
-                    timestamp[2]+=std::chrono::milliseconds(50);
+                    struct robot_interaction_data buf={{0x0297,serial_info.robot_id,team*100+7}};
+                    memcpy(&buf.robot_pos,&pos.opponent,sizeof(pos.opponent));
+                    if(referee_send(0x0301,sizeof(buf.header)+sizeof(buf.robot_pos),&buf))
+                    {
+                        #ifndef NDEBUG
+                        fprintf(stderr,"Sent data to robot\n");
+                        #endif
+                        timestamp[2]+=std::chrono::milliseconds(50);
+                    }
                 }
             }
             if(timer::now()<target)
