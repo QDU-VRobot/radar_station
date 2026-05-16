@@ -107,6 +107,11 @@ inline cv::Point2f backProjectPoint(cv::Point3d imagePoint, const cv::Mat& m1, c
     tmp-=m2;
     return cv::Point2f(tmp.at<double>(0),tmp.at<double>(1));
 }
+inline cv::Vec2f getPerpDirection(cv::Point2f left, cv::Point2f right) {
+    cv::Vec2f d = right - left;
+    float len = cv::norm(d);
+    return cv::Vec2f(-d[1], d[0]) / len;
+}
 }
 
 #endif

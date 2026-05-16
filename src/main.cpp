@@ -324,7 +324,9 @@ static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const
         ids.reserve(result.first.size());
         for(auto it=result.first.begin();it!=result.first.end();++it)
         {
-            cv::Point2f pos2d(it->tlbr[0]+it->tlwh[2]/2,it->tlbr[3]-it->tlwh[2]/6); //May not accurate
+            cv::Point2f posbl(it->tlbr[0],it->tlbr[3]);
+            cv::Point2f posbr(it->tlbr[2],it->tlbr[3]);
+            cv::Point2f pos2d=(posbl+posbr)/2;
             float height=0;
             if(!m1.empty()&&!m2.empty())
             {
@@ -334,10 +336,13 @@ static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const
                         height=i->second;
                         break;
                     }
-                pos2d=backProjectPoint(cv::Point3d(pos2d.x,pos2d.y,height),m1,m2);
+                posbl=backProjectPoint(cv::Point3d(posbl.x,posbl.y,height),m1,m2);
+                posbr=backProjectPoint(cv::Point3d(posbr.x,posbr.y,height),m1,m2);
+                pos2d=(posbl+posbr)/2;
             }
+            pos2d+=cv::Point2f(getPerpDirection(posbl,posbr)*cv::norm(posbr-posbl)/2);
             center_points.push_back(pos2d);
-            std::cout<<it->track_id<<':'<<'['<<pos2d.x<<','<<pos2d.y<<','<<height<<']'<<';';
+            std::cout<<it->track_id<<':'<<cv::Point3f(pos2d.x,pos2d.y,height)<<';';
             if(result.second.count(it->track_id))
             {
                 std::cout<<static_cast<unsigned>(result.second.at(it->track_id).first)<<','<<result.second.at(it->track_id).second;
