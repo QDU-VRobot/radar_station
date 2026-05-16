@@ -164,15 +164,13 @@ namespace rm
     void msg::receive(void)
     {
         ssize_t state;
-        while(get_fd()>=0) //Loop if not closed manually
+        while(running)
         {
-            while(get_fd()>=0) //Loop until an error occurred
+            while(running&&get_fd()>=0)
             {
                 state=read(&recv_buf.header,1); //Read SOF
-                if(state<0)
+                if(state<=0)
                     break;
-                else if(state==0)
-                    continue;
                 if(recv_buf.header.SOF!=0xA5)
                 {
                     #ifndef NDEBUG
@@ -181,7 +179,7 @@ namespace rm
                     continue;
                 }
                 state=read_wCRC8(&recv_buf.header,sizeof(recv_buf.header),1); //Read the rest of header
-                if(state<0)
+                if(state<=0)
                     break;
                 else if((state-=static_cast<ssize_t>(sizeof(recv_buf.header)-1))<0) //Read failed
                     continue;
@@ -199,7 +197,7 @@ namespace rm
                 fprintf(stderr,"\n");
                 #endif
                 state=read_wCRC16(&recv_buf.data,sizeof(recv_buf.header)+sizeof(recv_buf.cmd_id)+recv_buf.header.data_length+sizeof(frame_tail),sizeof(recv_buf.header));
-                if(state<0)
+                if(state<=0)
                     break;
                 else if((state-=static_cast<ssize_t>(sizeof(recv_buf.cmd_id)+recv_buf.header.data_length+sizeof(frame_tail)))<0)
                     continue;
@@ -212,7 +210,7 @@ namespace rm
                 }
                 referee_callback();
             }
-            if(get_fd()>=0)
+            if(running)
             {
                 fprintf(stderr,"Fatal error detected, re-enabling serial port\n");
                 while(!serial_quick_setup(*this))
@@ -236,10 +234,10 @@ namespace rm
     }
     void msg::poll(void)
     {
-        while(get_fd()>=0&&!serial_info.robot_id)
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        while(get_fd()>=0)
+        while(running)
         {
+            while(get_fd()<0||!serial_info.robot_id)
+                std::this_thread::sleep_for(std::chrono::milliseconds(250));
             uint8_t team=serial_info.robot_id/100;
             union both_robot_pos pos={.data={0}};
             timer::time_point target=timer::now()+interval;
@@ -326,10 +324,12 @@ namespace rm
     {
         if(get_fd()<0&&!serial_quick_setup(*this,filename))
             return false;
+        running=true;
         return rx=std::thread(&rm::msg::receive,this),tx=std::thread(&rm::msg::poll,this),true;
     }
     void msg::stop(void)
     {
+        running=false;
         close();
         if(tx.joinable())
             tx.join();

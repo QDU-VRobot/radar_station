@@ -193,10 +193,11 @@ namespace rm
         std::chrono::steady_clock::time_point timestamp[3];
         volatile uint8_t cmd;
         uint8_t seq;
+        bool running;
+        std::thread rx,tx;
         void referee_callback(void);
         void receive(void);
         void poll(void);
-        std::thread rx,tx;
     public:
         using timer=std::chrono::steady_clock;
         static std::vector<std::vector<uint8_t>> robot_classes; //HERO=0,ENGINEER,INFANTRY3,INFANTRY4,INFANTRY5,SENTRY
