@@ -69,6 +69,9 @@ void STrack::re_activate(STrack &new_track, int frame_id, bool new_id)
     static_tlwh();
     static_tlbr();
 
+    tlwh = new_track.tlwh;
+    static_tlbr();
+
     this->tracklet_len = 0;
     this->state = TrackState::Tracked;
     this->is_activated = true;
@@ -95,6 +98,9 @@ void STrack::update(STrack &new_track, int frame_id)
     this->covariance = mc.second;
 
     static_tlwh();
+    static_tlbr();
+
+    tlwh = new_track.tlwh;
     static_tlbr();
 
     this->state = TrackState::Tracked;
