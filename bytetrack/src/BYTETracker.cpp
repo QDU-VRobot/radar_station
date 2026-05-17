@@ -1,16 +1,16 @@
 #include "BYTETracker.h"
 #include <fstream>
 
-BYTETracker::BYTETracker(int frame_rate, int track_buffer, bool return_lost, float high_thresh)
+BYTETracker::BYTETracker(int frame_rate, int track_buffer, bool return_lost, float high_thresh, float match_thresh)
 {
     track_thresh = 0.5;
     this->high_thresh = high_thresh;
-    match_thresh = 0.8;
+    this->match_thresh = match_thresh;
 
     frame_id = 0;
     max_time_lost = frame_rate * track_buffer / 30;
     this->return_lost = return_lost;
-    cout << "Init ByteTrack! high_thresh=" << this->high_thresh << endl;
+    cout << "Init ByteTrack! high_thresh=" << this->high_thresh << " match_thresh=" << this->match_thresh << endl;
 }
 
 vector<STrack> BYTETracker::update(const vector<Object>& objects)

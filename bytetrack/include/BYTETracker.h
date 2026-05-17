@@ -12,7 +12,7 @@ struct Object
 class BYTETracker
 {
 public:
-    BYTETracker(int frame_rate = 30, int track_buffer = 30, bool return_lost = false, float high_thresh = 0.6f);
+    BYTETracker(int frame_rate = 30, int track_buffer = 30, bool return_lost = false, float high_thresh = 0.6f, float match_thresh = 0.8f);
 
     vector<STrack> update(const vector<Object>& objects);
     Scalar get_color(int idx);
