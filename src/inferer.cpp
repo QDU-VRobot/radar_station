@@ -167,7 +167,7 @@ namespace rm
             for(auto i=tracked.begin();i!=tracked.end();++i)
             {
                 float left=std::max(i->tlbr[0],0.0f),top=std::max(i->tlbr[1],0.0f),width=std::min(i->tlbr[2],static_cast<float>(tmp_img.cols))-left,height=std::min(i->tlbr[3],static_cast<float>(tmp_img.rows))-top; //tlbr=top, left, bottom and right edge
-                if(width<=0||height<=0)
+                if(width<1||height<1)
                     continue;
                 armors.push_back(tmp_img(cv::Rect2f(left,top,width,height)).clone()); //Do not overflow; Make image continous
                 ids.push_back(i->track_id);
