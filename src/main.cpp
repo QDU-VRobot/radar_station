@@ -317,9 +317,9 @@ static std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>
 static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const std::map<int, std::pair<uint8_t,float>>>& result, const cv::Mat& m1, const cv::Mat& m2, const std::vector<std::pair<std::vector<cv::Point2f>,float>>& contours, cv::VideoWriter& rec, rm::msg& msger, cv::Mat&& example_img, float scale, unsigned short latency=0) //Display, send to referee or record
 {
     std::vector<cv::Point2f> center_points; //Mark to the minimap and send to server
+    std::vector<uint8_t> ids;
     if(mode[MODE_USE_CAR]&&result.first.size()>0)
     {
-        std::vector<uint8_t> ids;
         center_points.reserve(result.first.size());
         ids.reserve(result.first.size());
         for(auto it=result.first.begin();it!=result.first.end();++it)
@@ -385,12 +385,12 @@ static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const
             if(msger.serial_info.robot_id)
                 cv::putText(img,std::string("Team: ")+(msger.serial_info.robot_id/100?"Blue":"Red"),cv::Point(350,30),0,1,cv::Scalar(0,255,0),2);
             {
-                std::string marked("Ally: ");
-                for(uint8_t i=1;i<=1<<5;i<<=1)
+                std::string marked("Foe: ");
+                for(uint8_t i=1;i<=1<<6;i<<=1)
                     marked+=msger.serial_info.foe_mark&i?'1':'0';
                 cv::putText(img,marked,cv::Point(img.cols-415,img.rows-40),0,1,cv::Scalar(0,255,0),2);
-                marked="Foe: ";
-                for(uint8_t i=1;i<=1<<5;i<<=1)
+                marked="Ally: ";
+                for(uint8_t i=1;i<=1<<6;i<<=1)
                     marked+=msger.serial_info.ally_mark&i?'1':'0';
                 cv::putText(img,marked,cv::Point(img.cols-420,img.rows-10),0,1,cv::Scalar(0,255,0),2);
             }
@@ -484,7 +484,7 @@ int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::camera& cam, cv::Vi
             if(!err_counter)
             {
                 cv::Mat tmp;
-                cv::cvtColor(frame.first,tmp,cv::COLOR_BayerBG2RGB);
+                cv::cvtColor(frame.first,tmp,cv::COLOR_BayerBG2BGR);
                 if(!cam_matrix.empty())
                     cv::remap(tmp,img,map,cv::Mat(),INTER_LINEAR);
                 else
@@ -497,10 +497,7 @@ int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::camera& cam, cv::Vi
                     result=rainfer.track(inferred,std::chrono::milliseconds(time_delta));
             }
             if(!err_counter)
-            {
                 std::cerr<<"Interval: "<<time_delta<<"ms"<<std::endl;
-                cv::cvtColor(img,img,cv::COLOR_RGB2BGR);
-            }
             if(output(img,result,m1,m2,std::get<2>(pose_points),rec,msger,example_img.clone(),scale,time_delta)==27)
                 running=false; //ESC to exit
             if(!err_counter)
