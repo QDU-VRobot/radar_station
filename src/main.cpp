@@ -386,11 +386,11 @@ static char output(cv::Mat& img,const std::pair<const std::vector<STrack>, const
                 cv::putText(img,std::string("Team: ")+(msger.serial_info.robot_id/100?"Blue":"Red"),cv::Point(350,30),0,1,cv::Scalar(0,255,0),2);
             {
                 std::string marked("Foe: ");
-                for(uint8_t i=1;i<=1<<6;i<<=1)
+                for(uint8_t i=1;i<1<<6;i<<=1)
                     marked+=msger.serial_info.foe_mark&i?'1':'0';
                 cv::putText(img,marked,cv::Point(img.cols-415,img.rows-40),0,1,cv::Scalar(0,255,0),2);
                 marked="Ally: ";
-                for(uint8_t i=1;i<=1<<6;i<<=1)
+                for(uint8_t i=1;i<1<<6;i<<=1)
                     marked+=msger.serial_info.ally_mark&i?'1':'0';
                 cv::putText(img,marked,cv::Point(img.cols-420,img.rows-10),0,1,cv::Scalar(0,255,0),2);
             }
@@ -700,6 +700,7 @@ int main(int argc, char** argv)
         rm::inferer::threads=threads>0?threads:std::thread::hardware_concurrency(),rm::inferer::timeout=video_config.video_device==0?std::chrono::milliseconds(0):wait_timeout;
         rm::inferer rainfer(model_config.save_ext?car_engine.c_str():model_config.car_file.c_str(),true,image_arg,model_config.save_ext?armor_engine.c_str():model_config.armor_file.c_str(),true);
         ret=run(rainfer,cap,*cam,rec,msger,image_arg,pose_points,cam_matrix,dist_coeffs,example_img,args.get<float>("S"));
+        rec.release();
     }
     return ret;
 }
