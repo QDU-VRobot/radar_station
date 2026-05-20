@@ -53,7 +53,7 @@ namespace rm
                 printf("Timer: %hu:%hu\n",recv_buf.game_status.stage_remain_time/60,recv_buf.game_status.stage_remain_time%60);
                 if(recv_buf.game_status.game_progress==4)
                 {
-                    if(recv_buf.game_status.stage_remain_time<240&&vulnerated<1||recv_buf.game_status.stage_remain_time<120&&vulnerated<2)
+                    if(recv_buf.game_status.stage_remain_time<300&&vulnerated<1||recv_buf.game_status.stage_remain_time<180&&vulnerated<2)
                     {
                         ++vulnerated;
                         printf("Double vulnerabilitiy triggered due to timeout\n");
@@ -84,7 +84,7 @@ namespace rm
                 for(size_t i=0;i<8;++i)
                     printf(" %hu",recv_buf.game_robot_HP.ally_HP[i]);
                 printf("\n");
-                if(serial_info.game_progress==4&&(recv_buf.game_robot_HP.ally_HP[6]<=300&&vulnerated<1||recv_buf.game_robot_HP.ally_HP[7]<=3000&&vulnerated<2))
+                if(serial_info.game_progress==4&&(recv_buf.game_robot_HP.ally_HP[6]<1000&&vulnerated<1||recv_buf.game_robot_HP.ally_HP[7]<5000&&vulnerated<2))
                 {
                     ++vulnerated;
                     printf("Double vulnerabilitiy triggered due to low HP\n");
