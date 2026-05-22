@@ -3,6 +3,7 @@
 
 #include "camera.h"
 #include "MvCameraControl.h"
+#include <string.h>
 namespace camera
 {
     union hikget
@@ -36,6 +37,7 @@ namespace camera
         hikcam& operator=(hikcam cam);
         hikcam(hikcam&& cam)=default;
         int open(size_t num);
+        int open(const char* serialNo);
         int open(const CAMERA_INFO* pstDevInfo=0);
         inline void* get_handle(void) const {return handle;}
         std::any get(enum datatype type,const char* key) const;

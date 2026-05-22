@@ -43,6 +43,25 @@ namespace camera
             throw std::runtime_error("Camera not found, check camera connection");
         return open(devlist.pDeviceInfo[num]);
     }
+    int hikcam::open(const char* serialNo)
+    {
+        CAMERA_INFO_LIST devlist=enum_cameras(); //USB cameras must be enumerated before opening
+        for(size_t i=0;i<devlist.nDeviceNum;++i)
+            switch(devlist.pDeviceInfo[i]->nTLayerType)
+            {
+                case MV_USB_DEVICE:
+                    if(strcmp(serialNo,(char*)devlist.pDeviceInfo[i]->SpecialInfo.stUsb3VInfo.chSerialNumber)==0)
+                        return open(devlist.pDeviceInfo[i]);
+                    break;
+                case MV_GIGE_DEVICE:
+                    if(strcmp(serialNo,(char*)devlist.pDeviceInfo[i]->SpecialInfo.stGigEInfo.chSerialNumber)==0)
+                        return open(devlist.pDeviceInfo[i]);
+                    break;
+                default:
+                    throw std::range_error("This method supports USB and GIGE only");
+            }
+        throw std::runtime_error("Camera not found, check camera connection");
+    }
     int hikcam::open(const CAMERA_INFO* pstDevInfo)
     {
         unsigned int nAccessMode = MV_ACCESS_Control;
