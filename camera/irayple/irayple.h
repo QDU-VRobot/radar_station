@@ -30,6 +30,7 @@ namespace camera
         irayple& operator=(irayple cam);
         irayple(irayple&& cam) = default;
         int open(size_t num);
+        int open(const char* serialNo);
         int open(const CAMERA_INFO* pInfo = 0);
         inline IMV_HANDLE get_handle() const { return handle; }
         std::any get(enum datatype type, const char* key) const;

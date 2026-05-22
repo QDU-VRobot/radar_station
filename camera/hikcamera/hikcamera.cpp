@@ -1,4 +1,5 @@
 #include "hikcamera.h"
+#include <string.h>
 #include <typeinfo>
 #include <stdexcept>
 namespace camera
@@ -57,8 +58,6 @@ namespace camera
                     if(strcmp(serialNo,(char*)devlist.pDeviceInfo[i]->SpecialInfo.stGigEInfo.chSerialNumber)==0)
                         return open(devlist.pDeviceInfo[i]);
                     break;
-                default:
-                    throw std::range_error("This method supports USB and GIGE only");
             }
         throw std::runtime_error("Camera not found, check camera connection");
     }

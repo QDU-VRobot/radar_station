@@ -1,4 +1,5 @@
 #include "irayple.h"
+#include <string.h>
 #include <typeinfo>
 #include <stdexcept>
 namespace camera
@@ -42,6 +43,14 @@ namespace camera
         if (devlist.nDevNum <= num)
             throw std::runtime_error("Camera not found, check camera connection");
         return open(&devlist.pDevInfo[num]);
+    }
+    int irayple::open(const char* serialNo)
+    {
+        CAMERA_INFO_LIST devlist = enum_cameras();
+        for (size_t i = 0; i < devlist.nDevNum; ++i)
+            if (strcmp(serialNo, devlist.pDevInfo[i].serialNumber) == 0)
+                return open(&devlist.pDevInfo[i]);
+        throw std::runtime_error("Camera not found, check camera connection");
     }
     int irayple::open(const CAMERA_INFO* pInfo)
     {
