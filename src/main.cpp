@@ -652,7 +652,7 @@ int main(int argc, char** argv)
             cam_matrix=new_cam_matrix;
             if(args.has("M"))
             {
-                cv::FileStorage config(args.get<std::string>("M"),cv::FileStorage::Mode::APPEND);
+                cv::FileStorage config(args.get<std::string>("M"),cv::FileStorage::Mode::READ|cv::FileStorage::Mode::APPEND);
                 if(config.isOpened()&&config["new_cam_matrix"].empty())
                     config<<"new_cam_matrix"<<cam_matrix;
             }

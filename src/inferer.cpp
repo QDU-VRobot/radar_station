@@ -110,11 +110,11 @@ namespace rm
             if(std::find(ids.begin(),ids.end(),i->first)==ids.end())
             {
                 i->second.second=std::min(i->second.second-0.5f/fps,1.0f);
-                // if(i->second.second<=0)
-                // {
-                //     i=tracking.erase(i);
-                //     continue;
-                // }
+                if(i->second.second<=0)
+                {
+                    i=tracking.erase(i);
+                    continue;
+                }
             }
             ++i;
         }
