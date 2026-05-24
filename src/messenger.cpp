@@ -261,6 +261,11 @@ namespace rm
                 {
                     //Send pos
                     static union both_map_robot buf; //Send cached pos when not found
+                    pos.data[9]=team?15-1.82:1.82;
+                    if(serial_info.stage_remain_time<400)
+                        pos.data[8]=14;
+                    else
+                        pos.data[8]=team?400+14-serial_info.stage_remain_time:28-(400+14-serial_info.stage_remain_time);
                     for(size_t i=0;i<sizeof(pos)/sizeof(float);++i)
                         if(pos.data[i]!=0)
                             buf.data[i]=std::max(pos.data[i]*100,1.f); //Convert unit (m->cm) and ensure not overflow
