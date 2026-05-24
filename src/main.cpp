@@ -527,6 +527,7 @@ int main(int argc, char** argv)
     struct video_config video_config={args.get<int>("V"),args.get<std::string>("@file"),args.get<int>("V")>0?args.get<unsigned>("@file"):0,args.get<float>("f"),args.get<float>("e"),args.get<float>("g"),args.get<std::string>("R"),args.get<std::string>("fourcc"),args.get<int>("q")};
     cv::Mat cam_matrix,dist_coeffs,example_img;
     std::tuple<cv::Mat,cv::Mat,std::vector<std::pair<std::vector<cv::Point2f>,float>>> pose_points;
+    bool has_new_matrix=false;
     if(args.has("C"))
     {
         cv::FileStorage config(args.get<std::string>("C"),cv::FileStorage::Mode::READ);
@@ -550,7 +551,7 @@ int main(int argc, char** argv)
         cv::FileStorage config(args.get<std::string>("M"),cv::FileStorage::Mode::READ);
         if(config.isOpened())
         {
-            if(args.has("U"))
+            if((has_new_matrix=!config["new_cam_matrix"].empty())&&args.has("U"))
                 config["new_cam_matrix"]>>cam_matrix;
             else
                 config["camera_matrix"]>>cam_matrix,config["distortion_coefficients"]>>dist_coeffs;
@@ -650,10 +651,10 @@ int main(int argc, char** argv)
             new_cam_matrix=cv::getOptimalNewCameraMatrix(cam_matrix,dist_coeffs,s,1);
             cv::initUndistortRectifyMap(cam_matrix,dist_coeffs,cv::Mat(),new_cam_matrix,s,CV_32FC2,map,tmp); //Undistort before backProjectPoint
             cam_matrix=new_cam_matrix;
-            if(args.has("M"))
+            if(!has_new_matrix&&!dist_coeffs.empty()&&args.has("M"))
             {
-                cv::FileStorage config(args.get<std::string>("M"),cv::FileStorage::Mode::READ|cv::FileStorage::Mode::APPEND);
-                if(config.isOpened()&&config["new_cam_matrix"].empty())
+                cv::FileStorage config(args.get<std::string>("M"),cv::FileStorage::Mode::APPEND);
+                if(config.isOpened())
                     config<<"new_cam_matrix"<<cam_matrix;
             }
         }
