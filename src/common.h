@@ -20,7 +20,7 @@ enum mode_flag : uint8_t {
     MODE_RECORD_RAW=4,
     MODE_RECORD_PROC=5,
     MODE_LOOP=6,
-    MODE_RADIO=7
+    MODE_PERSISTENT=7
 };
 inline bool file_readable(const char* filename)
 {

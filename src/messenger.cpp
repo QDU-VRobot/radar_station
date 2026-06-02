@@ -243,29 +243,34 @@ namespace rm
             timer::time_point target=timer::now()+interval;
             if(timer::now()>timestamp[0])
             {
-                // size_t count=0;
+                size_t count=0;
                 for(size_t i=0;i<sizeof(pos_cache)/sizeof(int8_t);++i)
                     if(pos_cache[i]>0&&--pos_cache[i])
-                        pos.data[i*2]=pos_from_sentry.data[i*2],pos.data[i*2+1]=pos_from_sentry.data[i*2+1]/*,++count*/; //Override pos with sentry's
+                        pos.data[i*2]=pos_from_sentry.data[i*2],pos.data[i*2+1]=pos_from_sentry.data[i*2+1],++count; //Override pos with sentry's
                     else if(pos_cache[i]<0&&++pos_cache[i])
-                        pos.data[i*2]=static_cast<float>(pos_from_radio.data[i*2]),pos.data[i*2+1]=static_cast<float>(pos_from_radio.data[i*2+1])/*,++count*/; //Override pos with radio's
+                        pos.data[i*2]=static_cast<float>(pos_from_radio.data[i*2]),pos.data[i*2+1]=static_cast<float>(pos_from_radio.data[i*2+1]),++count; //Override pos with radio's
                 for(size_t i=0,id;i<pos_from_camera.second.size();++i)
                     if(pos_from_camera.second[i]!=(uint8_t)-1&&((id=std::find(robot_classes[team].begin(),robot_classes[team].end(),pos_from_camera.second[i])-robot_classes[team].begin())<6||(id=6+std::find(robot_classes[!team].begin(),robot_classes[!team].end(),pos_from_camera.second[i])-robot_classes[!team].begin())<12)&&!pos_cache[id])
                     {
-                        pos.data[id*2]=pos_from_camera.first[i].x,pos.data[id*2+1]=pos_from_camera.first[i].y/*,++count*/;
+                        pos.data[id*2]=pos_from_camera.first[i].x,pos.data[id*2+1]=pos_from_camera.first[i].y,++count;
                         #ifndef NDEBUG
                         fprintf(stderr,"Robot %zu: (%.2f,%.2f)\n",id,pos_from_camera.first[i].x,pos_from_camera.first[i].y);
                         #endif
                     }
-                // if(count>0)
+                if(persistent_cache||count>0)
                 {
                     //Send pos
                     static union both_map_robot buf; //Send cached pos when not found
-                    pos.data[9]=team?15-1.82:1.82;
-                    if(serial_info.stage_remain_time<400)
-                        pos.data[8]=14;
-                    else
-                        pos.data[8]=team?400+14-serial_info.stage_remain_time:28-(400+14-serial_info.stage_remain_time);
+                    if(persistent_cache)
+                    {
+                        //Guess drone's pos
+                        pos.data[9]=team?15-1.82:1.82;
+                        if(serial_info.stage_remain_time<400)
+                            pos.data[8]=14;
+                        else
+                            pos.data[8]=team?400+14-serial_info.stage_remain_time:28-(400+14-serial_info.stage_remain_time);
+                    }
+                    else memset(&buf,0,sizeof(buf));
                     for(size_t i=0;i<sizeof(pos)/sizeof(float);++i)
                         if(pos.data[i]!=0)
                             buf.data[i]=std::max(pos.data[i]*100,1.f); //Convert unit (m->cm) and ensure not overflow

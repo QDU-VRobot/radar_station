@@ -202,11 +202,12 @@ namespace rm
         using timer=std::chrono::steady_clock;
         static std::vector<std::vector<uint8_t>> robot_classes; //HERO=0,ENGINEER,INFANTRY3,INFANTRY4,INFANTRY5,SENTRY
         static std::chrono::milliseconds interval;
+        static bool persistent_cache; //Send robot's last pos if lost, and guess drone's pos, instead of ignoring
         volatile struct serial_info serial_info;
         std::pair<std::vector<cv::Point2f>, std::vector<uint8_t>> pos_from_camera;
         volatile union both_robot_pos pos_from_sentry;
         volatile union map_robot pos_from_radio;
-        volatile int8_t pos_cache[12]; //cache for a while
+        volatile int8_t pos_cache[12]; //Cache control, positive for sentry, negative for radio and zero for video
         uint8_t guessed_password[6];
         volatile uint8_t password_retries;
         volatile uint8_t vulnerated; //Double vulnerability trigger
