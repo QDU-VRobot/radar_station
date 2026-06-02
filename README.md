@@ -1,6 +1,6 @@
 # Radar (station)
 Detect robots by their cars and armors with monocular camera and YOLO  
-Designed for and tested on Linux (Serial needs to be rewritten for Windows)
+Designed for and tested on Linux (Windows is disallowed in RoboMaster 2026)
 
 ## Flow:
 Assume all functions are enabled
@@ -32,11 +32,11 @@ graph TB
 ## System requirements:
 * A device with NVIDIA GPU (inc. edge computing device)
 * 4GB free RAM and VRAM
-* Generic camera or HikCamera (wide-angle lens‌ recommended)
+* Generic camera or GenICam-compatible camera (wide-angle lens‌ recommended)
 * Linux
 * C++17 compiler
 * CMake
-* git-lfs
+* Git & Git LFS
 
 ## Usage:
 1. Clone this repository **(Make sure models are cloned too, or train your own model and convert to ONNX)**
@@ -45,7 +45,7 @@ graph TB
 4. Check executables and libraries in *build* folder
 5. Use the calibration executable to generate camera config (`build/bin/calibration`)
 6. Add more parameters by checking help output (`build/bin/radar --help`)
-7. Set up camera and serial port (based on RoboMaster 2026 serial protocol V1.0.0)
+7. Set up camera and serial port (based on RoboMaster 2026 serial protocol V1.3.0)
 8. Mark points on first startup (first contour for PnP and other contours for highlands)
 9. Check result
 
@@ -58,13 +58,14 @@ graph TB
 ## External libraries: (Use package manager to install them)
 * [OpenCV](https://opencv.org/releases)
 * [Eigen3](https://gitlab.com/libeigen/eigen)
-* [CUDA & TensorRT](https://developer.nvidia.com/cuda-downloads)
-* [MVS](https://www.hikrobotics.com/cn/machinevision/service/download) (For HikCamera)
+* [CUDA & TensorRT (10.x)](https://developer.nvidia.com/cuda-downloads)
+* [MVS](https://www.hikrobotics.com/cn/machinevision/service/download) (For HikCamera) or [MVviewer](https://www.1win.com.tw/support) (For other GenICam-compatible camera)
 
 The ONNX files are built by [trtyolo](https://github.com/laugh12321/trtyolo-export) with plugins and dynamic batch
 
 ## Result:
-In RoboMaster 2025, this program vulnerated opponents for 338.1s per game in average with 8mm lens
+In RoboMaster 2025, this program vulnerated opponents for 338.1s per game in average with 8mm lens  
+In RoboMaster 2026, this program vulnerated opponents for 515.8s per game in average with 6mm lens  
 
 ## Special thanks:
 Datasets provided by [Taurus](https://github.com/SCAU-RM-NAV/RM2023_Radar_Dataset)
@@ -73,6 +74,11 @@ Datasets provided by [Taurus](https://github.com/SCAU-RM-NAV/RM2023_Radar_Datase
 * [ ] Train a better model with videos recorded
 * [ ] Modify tracker's parameters to improve stability
 * [ ] Adjust vulnerabilitiy's trigger
-* [ ] Cooperate with a LiDAR
-* [ ] Behavior-based guess
-* [ ] **NEW** Radio decrypt
+* [ ] ~~Cooperate with a LiDAR~~ (Radio should be enough)
+* [x] ~~Behavior-based~~ guess (Persistent mode)
+* [ ] Radio demodulation
+
+## Note:
+Interface provided for radio integration:  
+Read robot_id and encrypt_level for parameters  
+When demodulate successfully, modify guessed_password and password_retries to upload the key, and modify pos_from_radio and pos_cache (to negative) to upload positions
