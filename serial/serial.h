@@ -69,6 +69,8 @@ namespace serial
         #if __cplusplus >= 201103L
         tcp(tcp&& other) noexcept:stream(std::move(other)),domain(other.domain),host(std::move(other.host)),port(other.port){}
         #endif
+        inline const std::string& get_host(void) const{return host;}
+        inline uint16_t get_port(void) const{return port;}
         int connect(const std::string& host = std::string(), uint16_t port = 0);
         int open(uint16_t port = 0, int backlog = 5);
         int accept(tcp& client);

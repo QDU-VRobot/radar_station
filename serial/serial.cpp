@@ -268,12 +268,17 @@ namespace serial
             return -1;
         }
         client.domain=addr.ss_family;
-        client.port=port;
         char ip[INET6_ADDRSTRLEN];
         if(addr.ss_family==AF_INET)
+        {
+            client.port=ntohs(reinterpret_cast<struct sockaddr_in*>(&addr)->sin_port);
             inet_ntop(AF_INET,&reinterpret_cast<struct sockaddr_in*>(&addr)->sin_addr,ip,sizeof(ip));
+        }
         else
+        {
+            client.port=ntohs(reinterpret_cast<struct sockaddr_in6*>(&addr)->sin6_port);
             inet_ntop(AF_INET6,&reinterpret_cast<struct sockaddr_in6*>(&addr)->sin6_addr,ip,sizeof(ip));
+        }
         client.host=ip;
         return client.fd;
     }
