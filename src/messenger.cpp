@@ -80,9 +80,11 @@ namespace rm
                 serial_info.stage_remain_time=buf.winner;
             break;
             case 0x0003:
-                printf("Robot HP:");
+                printf("HP from serial:");
                 for(size_t i=0;i<8;++i)
-                    printf(" %hu",buf.game_robot_HP.ally_HP[i]);
+                    printf(" %hd",buf.game_robot_HP.ally_HP[i]);
+                for(size_t i=0;i<2;++i)
+                    printf(" %hu",buf.game_robot_HP.opponent_HP[i]);
                 printf("\n");
                 if(serial_info.game_progress==4&&(buf.game_robot_HP.ally_HP[6]<1000&&vulnerated<1||buf.game_robot_HP.ally_HP[7]<5000&&vulnerated<2))
                 {
@@ -90,6 +92,7 @@ namespace rm
                     printf("Double vulnerabilitiy triggered due to low HP\n");
                 }
                 serial_info.ally_outpost_base_HP=buf.game_robot_HP.ally_HP[6]+buf.game_robot_HP.ally_HP[7];
+                serial_info.foe_outpost_base_HP=buf.game_robot_HP.opponent_HP[0]+buf.game_robot_HP.opponent_HP[1];
             break;
             case 0x0104:
                 printf("Robot %hhu is %s %hhu time(s)!\n",buf.referee_warning.offending_robot_id,buf.referee_warning.level>=3?"punished":"warned",buf.referee_warning.count);
@@ -147,12 +150,34 @@ namespace rm
                             if(pos_cache[i+6]>=0&&buf.robot_interaction_data.robot_pos.data[i*2]>0&&buf.robot_interaction_data.robot_pos.data[i*2+1]>0)
                             {
                                 pos_cache[i+6]=0; //Make sure the pos being modified is not used
-                                printf("Robot position updated (%zu)\n",i);
+                                printf("Robot position updated (%zu)\n",i+6);
                                 pos_from_sentry.data[(i+6)*2]=buf.robot_interaction_data.robot_pos.data[i*2],pos_from_sentry.data[(i+6)*2+1]=buf.robot_interaction_data.robot_pos.data[i*2+1];
                                 pos_cache[i+6]=20; //Override radar's pos for 2 secs
                             }
                     break;
                 }
+            break;
+            case 0x0A01:
+                for(size_t i=0;i<6;++i)
+                    if(pos_cache[i]<=0&&buf.map_robot.data[i*2]>0&&buf.map_robot.data[i*2+1]>0)
+                    {
+                        pos_cache[i]=0; //Make sure the pos being modified is not used
+                        printf("Robot position updated (%zu)\n",i);
+                        pos_from_radio.data[i*2]=buf.map_robot.data[i*2],pos_from_radio.data[i*2+1]=buf.map_robot.data[i*2+1];
+                        pos_cache[i]=-20; //Override radar's pos for 2 secs
+                    }
+            break;
+            case 0x0A02:
+                printf("HP from radio:");
+                for(size_t i=0;i<6;++i)
+                    printf(" %hd",buf.game_robot_HP.foe_HP[i]);
+            break;
+            case 0x0A06:
+                printf("Password: ");
+                for(size_t i=0;i<sizeof(buf.password)/sizeof(uint8_t);++i)
+                    printf("%c",buf.password[i]);
+                printf("\n");
+                memcpy(&guessed_password,&buf.password,sizeof(guessed_password)),password_retries=3;
             break;
             #ifndef NDEBUG
             default:
@@ -214,10 +239,10 @@ namespace rm
             {
                 fprintf(stderr,"Fatal error detected\n");
                 if(reopen)
-                    while(!reopen(src))
+                    while(running&&!reopen(src))
                         std::this_thread::sleep_for(std::chrono::milliseconds(250));
                 else
-                    running=false;
+                    return;
             }
         }
     }
@@ -240,7 +265,11 @@ namespace rm
         while(running)
         {
             while(referee.get_fd()<0||!serial_info.robot_id)
+            {
+                if(!running)
+                    return;
                 std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            }
             uint8_t team=serial_info.robot_id/100;
             union both_robot_pos pos={.data={0}};
             timer::time_point target=timer::now()+interval;
@@ -312,6 +341,17 @@ namespace rm
                             fprintf(stderr,"\n");
                         }
                         timestamp[1]+=std::chrono::milliseconds(100);
+                    }
+                }
+                if(radio.get_fd()>=0)
+                {
+                    //Send to radio
+                    struct rf_tx_frame buf={0xA5,serial_info.robot_id,serial_info.encrypt_level};
+                    if(radio.write(&buf,sizeof(buf))==static_cast<ssize_t>(sizeof(buf)))
+                    {
+                        #ifndef NDEBUG
+                        fprintf(stderr,"Sent data to radio\n");
+                        #endif
                     }
                 }
             }

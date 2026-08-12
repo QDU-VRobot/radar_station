@@ -75,10 +75,8 @@ Datasets provided by [Taurus](https://github.com/SCAU-RM-NAV/RM2023_Radar_Datase
 * [ ] Modify tracker's parameters to improve stability
 * [ ] Adjust vulnerabilitiy's trigger
 * [ ] ~~Cooperate with a LiDAR~~ (Radio should be enough)
-* [x] ~~Behavior-based~~ guess (Persistent mode)
-* [ ] Radio demodulation
 
 ## Note:
-Interface provided for radio integration:  
-Read robot_id and encrypt_level for parameters  
-When demodulate successfully, modify guessed_password and password_retries to upload the key, and modify pos_from_radio and pos_cache (to negative) to upload positions
+TCP interface provided for radio integration:  
+Read rf_tx_frame for parameters  
+Send demodulated RAW protocol data to upload positions and password

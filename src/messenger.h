@@ -28,8 +28,12 @@ namespace rm
     };
     union game_robot_HP
     {
-        uint16_t ally_HP[8]; //123457OB
-        uint16_t opponent_HP[6]; //1234_7
+        struct
+        {
+            uint16_t ally_HP[8]; //1234_7OB
+            uint16_t opponent_HP[2]; //OB
+        };
+        uint16_t foe_HP[6]; //1234_7
     };
     struct referee_warning
     {
@@ -55,6 +59,7 @@ namespace rm
         uint16_t shooter_barrel_cooling_value;
         uint16_t shooter_barrel_heat_limit;
         uint16_t chassis_power_limit;
+        float bullet_speed_limit;
         uint8_t power_management_gimbal_output : 1;
         uint8_t power_management_chassis_output : 1;
         uint8_t power_management_shooter_output : 1;
@@ -100,6 +105,13 @@ namespace rm
             union map_robot ally;
         };
         uint16_t data[24];
+    };
+    //Communicate with radio
+    struct rf_tx_frame
+    {
+        uint8_t header; // 0xA5
+        uint8_t robot_id;
+        uint8_t encrypt_level;
     };
     //Communicate with sentry
     union robot_pos
@@ -167,6 +179,7 @@ namespace rm
                 struct radar_info radar_info;
                 struct robot_interaction_data robot_interaction_data;
                 union map_robot map_robot;
+                uint8_t password[6];
             };
         };
         uint8_t data[MAX_BUF];
