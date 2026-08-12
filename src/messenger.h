@@ -187,18 +187,21 @@ namespace rm
         uint8_t encrypt_level:2;
         bool encrypt_changeable:1;
     };
-    class msg: public serial::terminal
+    class msg
     {
         union frame recv_buf;
+        union frame rf_buf;
         std::chrono::steady_clock::time_point timestamp[3];
         volatile uint8_t cmd;
         uint8_t seq;
         bool running;
-        std::thread rx,tx;
-        void referee_callback(void);
-        void receive(void);
+        std::thread rx,tx,rf;
+        void referee_callback(union frame& buf);
         void poll(void);
+        void receive(serial::stream& src, union frame& buf, bool(*reopen)(serial::stream&));
     public:
+        serial::terminal referee;
+        serial::tcp radio;
         using timer=std::chrono::steady_clock;
         static std::vector<std::vector<uint8_t>> robot_classes; //HERO=0,ENGINEER,INFANTRY3,INFANTRY4,INFANTRY5,SENTRY
         static std::chrono::milliseconds interval;
@@ -211,8 +214,7 @@ namespace rm
         uint8_t guessed_password[6];
         volatile uint8_t password_retries;
         volatile uint8_t vulnerated; //Double vulnerability trigger
-        msg():timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),pos_cache{0},guessed_password{0},password_retries(0),vulnerated(0){}
-        msg(serial::terminal&& s):serial::terminal(s),timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),pos_cache{0},guessed_password{0},password_retries(0),vulnerated(0){}
+        msg(int referee_fd=-1, int radio_fd=-1):referee(referee_fd),radio(radio_fd),timestamp{timer::now(),timer::now(),timer::now()},cmd(0),seq(0),pos_cache{0},guessed_password{0},password_retries(0),vulnerated(0){}
         msg(const msg&)=delete; //Prevents thread problems
         msg& operator=(const msg&)=delete;
         msg(msg&&)=default;
@@ -220,7 +222,7 @@ namespace rm
         static bool serial_quick_setup(serial::terminal& port, const char* filename=0);
         static std::vector<uint8_t> generate_password(size_t len);
         bool referee_send(uint16_t cmd_id, uint16_t data_length, const void* data);
-        bool run(const char* filename=0);
+        bool run(const char* referee_tty=0, const char* radio_host=0, uint16_t radio_port=0);
         void stop(void);
         ~msg();
     };
