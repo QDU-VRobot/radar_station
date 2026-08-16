@@ -59,7 +59,7 @@ graph TB
 * [OpenCV](https://opencv.org/releases)
 * [Eigen3](https://gitlab.com/libeigen/eigen)
 * [CUDA & TensorRT (10.x)](https://developer.nvidia.com/cuda-downloads)
-* [MVS](https://www.hikrobotics.com/cn/machinevision/service/download) (For HikCamera) or [MVviewer](https://www.1win.com.tw/support) (For other GenICam-compatible camera)
+* [Aravis (0.8.x)](https://github.com/AravisProject/aravis) (For GenICam)
 
 The ONNX files are built by [trtyolo](https://github.com/laugh12321/trtyolo-export) with plugins and dynamic batch
 

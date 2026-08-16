@@ -8,8 +8,7 @@
 #include "opencv2/core.hpp"
 #include "opencv2/videoio.hpp"
 #include "camera.h"
-#include "hikcamera.h"
-#include "irayple.h"
+#include "aravis.h"
 extern "C" //Just for shorter symbols :)
 {
 enum mode_flag : uint8_t {
@@ -49,49 +48,24 @@ inline bool start_camera(camera::camera& cam)
 {
     if(cam.isopened())
     {
-        if(dynamic_cast<camera::hikcam*>(&cam))
+        if(cam.start())
         {
-            if(cam.start()!=camera::hikcam::OK)
-            {
-                fprintf(stderr,"An error occurred while starting video [%d]\n",camera::hikcam::last_error);
-                return false;
-            }
-            return true;
+            fprintf(stderr,"An error occurred while starting video [%d]\n",camera::aravis::last_error?camera::aravis::last_error->code:0);
+            return false;
         }
-        else if(dynamic_cast<camera::irayple*>(&cam))
-        {
-            if(cam.start()!=camera::irayple::OK)
-            {
-                fprintf(stderr,"An error occurred while starting video [%d]\n",camera::irayple::last_error);
-                return false;
-            }
-            return true;
-        }
+        return true;
     }
     return false;
 }
 inline std::pair<cv::Mat,int64_t> grabMatTime(camera::camera& cam,unsigned int ms=-1)
 {
     int64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    if(dynamic_cast<camera::hikcam*>(&cam))
+    auto [data, fmt, width, height] = cam.grab(ms);
+    if(data)
     {
-        camera::hikcam::FRAME frame=std::any_cast<camera::hikcam::FRAME>(cam.grab(ms));
-        if(camera::hikcam::last_error==camera::hikcam::OK)
-        {
-            std::pair<cv::Mat,int64_t> ret=std::make_pair(cv::Mat(frame.stFrameInfo.nHeight,frame.stFrameInfo.nWidth,CV_8UC1,frame.pBufAddr).clone(),timestamp);
-            cam.free(frame);
-            return ret;
-        }
-    }
-    else if(dynamic_cast<camera::irayple*>(&cam))
-    {
-        camera::irayple::FRAME frame=std::any_cast<camera::irayple::FRAME>(cam.grab(ms));
-        if(camera::irayple::last_error==camera::irayple::OK)
-        {
-            std::pair<cv::Mat,int64_t> ret=std::make_pair(cv::Mat(frame.frameInfo.height,frame.frameInfo.width,CV_8UC1,frame.pData).clone(),timestamp);
-            cam.free(frame);
-            return ret;
-        }
+        cv::Mat img = cv::Mat(height, width, CV_8UC1, const_cast<void*>(data)).clone();
+        cam.free();
+        return std::make_pair(img, timestamp);
     }
     return std::make_pair(cv::Mat(),timestamp);
 }
