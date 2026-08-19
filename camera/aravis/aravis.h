@@ -8,8 +8,11 @@ namespace camera
 {
     class aravis : public camera
     {
-        std::unique_ptr<ArvCamera,decltype(&g_object_unref)> handle;
-        std::unique_ptr<ArvStream,decltype(&g_object_unref)> stream;
+        struct g_object_deleter { void operator()(void* p) const noexcept { g_object_unref(p); } };
+        using ArvCameraPtr = std::unique_ptr<ArvCamera, g_object_deleter>;
+        using ArvStreamPtr = std::unique_ptr<ArvStream, g_object_deleter>;
+        ArvCameraPtr handle;
+        ArvStreamPtr stream;
         ArvBuffer* buffer;
     public:
         static GError* last_error;

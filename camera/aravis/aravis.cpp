@@ -5,11 +5,11 @@
 namespace camera
 {
     GError* aravis::last_error = nullptr;
-    aravis::aravis(size_t index): handle(nullptr, &g_object_unref), stream(nullptr, &g_object_unref), buffer(nullptr)
+    aravis::aravis(size_t index): handle(nullptr), stream(nullptr), buffer(nullptr)
     {
         aravis::open(index);
     }
-    aravis::aravis(const char* serial): handle(nullptr, &g_object_unref), stream(nullptr, &g_object_unref), buffer(nullptr)
+    aravis::aravis(const char* serial): handle(nullptr), stream(nullptr), buffer(nullptr)
     {
         if(serial)
             aravis::open(serial);
@@ -25,7 +25,7 @@ namespace camera
         enum_cameras();
         if (arv_get_n_devices() <= index)
             throw std::runtime_error("Camera not found, check camera connection");
-        handle = std::unique_ptr<ArvCamera,decltype(&g_object_unref)>(arv_camera_new(arv_get_device_id(index), &last_error), &g_object_unref);
+        handle = ArvCameraPtr(arv_camera_new(arv_get_device_id(index), &last_error));
         is_opened = last_error == nullptr;
         return last_error != nullptr;
     }
@@ -37,7 +37,7 @@ namespace camera
         for (size_t i = 0; i < arv_get_n_devices(); ++i)
             if (strcmp(serial, arv_get_device_serial_nbr(i)) == 0)
             {
-                handle = std::unique_ptr<ArvCamera,decltype(&g_object_unref)>(arv_camera_new(arv_get_device_id(i), &last_error), &g_object_unref);
+                handle = ArvCameraPtr(arv_camera_new(arv_get_device_id(i), &last_error));
                 is_opened = last_error == nullptr;
                 return last_error != nullptr;
             }
@@ -116,7 +116,7 @@ namespace camera
     {
         g_clear_error(&last_error);
         if(!stream)
-            stream = std::unique_ptr<ArvStream,decltype(&g_object_unref)>(arv_camera_create_stream(handle.get(), nullptr, nullptr, &last_error), &g_object_unref);
+            stream = ArvStreamPtr(arv_camera_create_stream(handle.get(), nullptr, nullptr, &last_error));
         if(!ARV_IS_STREAM(stream.get()))
             return 1;
         size_t payload = arv_camera_get_payload(handle.get(), &last_error);
@@ -132,7 +132,7 @@ namespace camera
         if(stream)
             return 1;
         g_clear_error(&last_error);
-        stream = std::unique_ptr<ArvStream,decltype(&g_object_unref)>(arv_camera_create_stream(handle.get(), callback, user_data?user_data:stream.get(), &last_error), &g_object_unref);
+        stream = ArvStreamPtr(arv_camera_create_stream(handle.get(), callback, user_data?user_data:stream.get(), &last_error));
         return !ARV_IS_STREAM(stream.get());
     }
     std::tuple<const void*,enum pixel_format,unsigned,unsigned> aravis::grab(unsigned int ms)
