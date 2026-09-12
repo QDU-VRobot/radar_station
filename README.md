@@ -43,11 +43,12 @@ graph TB
 2. Run `cmake -B build` to generate a *build* folder
 3. Run `cmake --build build/ -j` to compile
 4. Check executables and libraries in *build* folder
-5. Use the calibration executable to generate camera config (`build/bin/calibration`)
-6. Add more parameters by checking help output (`build/bin/radar --help`)
-7. Set up camera and serial port (based on RoboMaster 2026 serial protocol V1.3.0)
-8. Mark points on first startup (first contour for PnP and other contours for highlands)
-9. Check result
+5. On first run: Run `echo 'SUBSYSTEM=="usb", ATTRS{bDeviceClass}=="ef", ATTRS{bDeviceSubClass}=="02", ATTRS{bDeviceProtocol}=="01", ENV{ID_USB_INTERFACES}=="*:ef0500:*", MODE="0666"' | sudo tee /etc/udev/rules.d/aravis.rules` to access USB cameras
+6. Use the calibration executable to generate camera config (`build/bin/calibration`)
+7. Add more parameters by checking help output (`build/bin/radar --help`)
+8. Set up camera and serial port (based on RoboMaster 2026 serial protocol V1.3.0)
+9. Mark points on first startup (first contour for PnP and other contours for highlands)
+10. Check result
 
 >Remove config and redo step 7 and 8 when starting next game
 
