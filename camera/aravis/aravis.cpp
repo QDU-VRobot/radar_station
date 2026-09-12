@@ -138,7 +138,11 @@ namespace camera
     std::tuple<const void*,enum pixel_format,unsigned,unsigned> aravis::grab(unsigned int ms)
     {
         free();
-        buffer = arv_stream_pop_buffer(stream.get());
+        ArvBuffer* b;
+        while(ARV_IS_BUFFER(b = arv_stream_try_pop_buffer(stream.get())))
+            free(), buffer = b;
+        if (!buffer)
+            buffer = arv_stream_timeout_pop_buffer(stream.get(), ms * 1000);
         return ARV_IS_BUFFER(buffer) ? std::make_tuple(arv_buffer_get_data(buffer, nullptr), static_cast<enum pixel_format>(arv_buffer_get_image_pixel_format(buffer)), arv_buffer_get_image_width(buffer), arv_buffer_get_image_height(buffer)) : std::make_tuple(nullptr, PIXEL_FORMAT_NONE, 0, 0);
     }
     int aravis::free(void)

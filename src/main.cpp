@@ -462,6 +462,7 @@ int run(rm::inferer& rainfer, cv::VideoCapture& cap, camera::camera& cam, cv::Vi
                 else
                     img=std::move(tmp);
             }
+            else img=frame.first;
             if(mode[MODE_USE_CAR])
             {
                 trtyolo::DetectRes inferred=rainfer.infer(img);
