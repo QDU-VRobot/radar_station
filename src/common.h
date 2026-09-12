@@ -59,8 +59,8 @@ inline bool start_camera(camera::camera& cam)
 }
 inline std::pair<cv::Mat,int64_t> grabMatTime(camera::camera& cam,unsigned int ms=-1)
 {
-    int64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     auto [data, fmt, width, height] = cam.grab(ms);
+    int64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     if(data)
     {
         cv::Mat img = cv::Mat(height, width, CV_8UC1, const_cast<void*>(data)).clone();

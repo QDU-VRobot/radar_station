@@ -122,7 +122,7 @@ namespace camera
         size_t payload = arv_camera_get_payload(handle.get(), &last_error);
         if(last_error != nullptr)
             return 1;
-        for(size_t i = 0; i < 2; ++i)
+        for(size_t i = 0; i < 8; ++i)
             arv_stream_push_buffer(stream.get(), arv_buffer_new(payload, NULL));
         arv_camera_start_acquisition(handle.get(), &last_error);
         return last_error != nullptr;
@@ -141,8 +141,8 @@ namespace camera
         ArvBuffer* b;
         while(ARV_IS_BUFFER(b = arv_stream_try_pop_buffer(stream.get())))
             free(), buffer = b;
-        if (!buffer)
-            buffer = arv_stream_timeout_pop_buffer(stream.get(), ms * 1000);
+        if(ms)
+            free(), buffer = arv_stream_timeout_pop_buffer(stream.get(), ms * 1000);
         return ARV_IS_BUFFER(buffer) ? std::make_tuple(arv_buffer_get_data(buffer, nullptr), static_cast<enum pixel_format>(arv_buffer_get_image_pixel_format(buffer)), arv_buffer_get_image_width(buffer), arv_buffer_get_image_height(buffer)) : std::make_tuple(nullptr, PIXEL_FORMAT_NONE, 0, 0);
     }
     int aravis::free(void)
